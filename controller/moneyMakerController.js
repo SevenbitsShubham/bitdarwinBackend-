@@ -7,23 +7,41 @@ const { spawnSync } = require('child_process');
 
 const createContract = async(req,res) =>{
         try{
-            if(!req.body.strikePrice || !req.body.premium || !req.body.openInterest || !req.body.expirationDate || !req.body.query || !req.body.signature){
+            //initial parameter validation
+            if(!req.body.walletAddress || !req.body.strikePrice || !req.body.premium || !req.body.openInterest || !req.body.expirationDate || !req.body.query || !req.body.hex || !req.body.signature ){
                  throw new Error("Valid parameters are required.")   
             }
 
-            
-            let newContract = {
+            //find user in db
+            let user =  await models.User.findOne({walletAddress:req.body.walletAddress})
+
+            //if user not found add user in db
+            if(!user){
+                user =  await models.User.create({walletAddress:req.body.walletAddress})
+            }
+
+            //if found add transaction details
+            let transactionData = {
+                userId:user.userId,
+                sqlQuery:req.body.query,
+                queryHex:req.body.hex,
+                signature:req.body.signature
+            }
+            let newTransaction = await models.Transaction.create(transactionData)
+
+            //add contract details
+            let contractData = {
+                userId: user.userId,
+                txId: newTransaction.txId,
                 strikePrice:req.body.strikePrice,
                 premium:req.body.premium,
                 openInterest:req.body.openInterest,
                 expirationDate:req.body.expirationDate,
                 status: 'inProcess',
-                query:req.body.query,
-                signature:req.body.signature,
                 contractAddress:null
-            }
-
-            await models.MarketMakerContract.create(newContract)
+            }                
+            
+            await models.MarketMakerContract.create(contractData)
             res.status(200).send('Success')        
 
 

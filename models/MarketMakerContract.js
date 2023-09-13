@@ -1,4 +1,5 @@
 const sequelize = require('sequelize');
+const Transaction = require('./Transaction');
 
 module.exports = (sequelize,DataTypes) =>{
     const MarketMakerContract = sequelize.define("MarketMakerContract",{
@@ -8,11 +9,25 @@ module.exports = (sequelize,DataTypes) =>{
             autoIncrement:true
 
         },
+        userId:{
+            type:DataTypes.INTEGER,
+            references:{
+                model:'Users',
+                key:'userId'
+            }
+        },
+        txId:{
+            type: DataTypes.INTEGER,
+            references:{
+                model:'Transactions',
+                key:'txId'
+            }
+        },
         strikePrice:{
             type: DataTypes.INTEGER,
         },
         premium:{
-            type: DataTypes.INTEGER,
+            type: DataTypes.FLOAT,
         },  
         openInterest:{
             type: DataTypes.INTEGER,
@@ -25,13 +40,15 @@ module.exports = (sequelize,DataTypes) =>{
         },
         contractAddress:{
             type: DataTypes.STRING,
-        },
-        query:{
-            type: DataTypes.STRING,
-        },
-        signature:{
-            type: DataTypes.STRING,
-        }      
+        }
     })
+
+    MarketMakerContract.associate= (models) =>{
+        MarketMakerContract.hasOne(models.Transaction,{
+            foreignKey:"txId",
+            targetKey:"txId",
+    })
+    }
+
     return MarketMakerContract
 }
