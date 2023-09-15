@@ -50,6 +50,7 @@ simulated_prices = np.zeros((num_simulations, num_steps))
 for i in range(num_simulations):
     simulated_prices[i,:] = predictions + np.random.normal(0, model.resid.std(), num_steps)
 
+print(simulated_prices)
 # Plot the results of the Monte Carlo simulation
 plt.figure(figsize=(10,5))
 plt.plot(simulated_prices.T, color='gray', alpha=0.1)  # Use alpha for better visualization

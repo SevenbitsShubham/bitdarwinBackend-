@@ -36,7 +36,8 @@ def prediction():
     simulated_prices = np.zeros((num_simulations, num_steps))
     for i in range(num_simulations):
         simulated_prices[i,:] = predictions + np.random.normal(0, model.resid.std(), num_steps)
-    print(simulated_prices)
+    # result ={"simulated_prices":simulated_prices,"predictions":predictions}
+    
     # Plot the results of the Monte Carlo simulation
     plt.figure(figsize=(10,5))
     plt.plot(simulated_prices.T, color='gray', alpha=0.1)  # Use alpha for better visualization
@@ -51,4 +52,5 @@ def prediction():
 if sys.argv[1] == 'prediction':
     prediction()
 
+print("")
 sys.stdout.flush()

@@ -1,9 +1,16 @@
 const express = require('express')
 const models = require('../models/index.js')
 const { spawnSync } = require('child_process');
+const cloudinary = require('cloudinary').v2
+const fs = require("fs")
 // const Chroma = require('langchain/vectorstores/chroma')
 // const OpenAIEmbeddings = require('langchain/embeddings/openai')
-
+cloudinary.config({
+    cloud_name: process.env.CLOUD_NAME,
+    api_key: process.env.API_KEY,
+    api_secret: process.env.API_SECRET,
+  });
+  
 
 const createContract = async(req,res) =>{
         try{
@@ -59,10 +66,26 @@ const pricePredictor = async(req,res) =>{
         const predictionScript = spawnSync('python3',["../backend/utils/prediction.py","prediction",'../backend/utils/BTC-USD-price.csv'])
         let result= predictionScript.stdout?.toString()?.trim();
         const error = predictionScript.stderr?.toString()?.trim();
+
+
         if(error){
             throw new Error(error)
         }
-        console.log("log",result,error)
+
+        let filepath = '../backend/plot.png'
+        cloudinary.uploader.upload(filepath,(error,result)=>{
+            if(error){
+                throw new Error(error)
+            }
+            if(result){
+                console.log("log1",result)
+                if(fs.existsSync(filepath)){
+                    fs.unlinkSync(filepath)
+                }
+                res.status(200).json({url:result.secure_url})
+            }
+        })
+        
     }
     catch(error){
         console.log("error",error)
@@ -70,7 +93,16 @@ const pricePredictor = async(req,res) =>{
     }
 }
 
+const getPoolAddress = async(req,res) =>{
+    try {
+        res.status(200).json({poolAddress:process.env.POOL_ADDRESS})
+    } catch (error) {
+        
+    }
+}
+
 module.exports = {
     createContract,
-    pricePredictor
+    pricePredictor,
+    getPoolAddress
 }
