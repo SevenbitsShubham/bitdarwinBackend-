@@ -9,8 +9,8 @@ module.exports = (sequelize,DataTypes) =>{
         },
         walletAddress:{
             type:DataTypes.STRING,
-            unique:true,
-            allowNull:false
+            // unique:true,
+            // allowNull:false
         }
     })
 
