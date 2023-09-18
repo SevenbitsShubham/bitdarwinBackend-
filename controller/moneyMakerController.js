@@ -32,20 +32,23 @@ const createContract = async(req,res) =>{
                 userId:user.userId,
                 sqlQuery:req.body.query,
                 queryHex:req.body.hex,
-                signature:req.body.signature
+                signature:req.body.signature,
+                tyType:'moneyMaker'
             }
             let newTransaction = await models.Transaction.create(transactionData)
 
             //add contract details
             let contractData = {
-                userId: user.userId,
+                ownerId: user.userId,
+                createrId: user.userId,
                 txId: newTransaction.txId,
                 strikePrice:req.body.strikePrice,
                 premium:req.body.premium,
                 openInterest:req.body.openInterest,
                 expirationDate:req.body.expirationDate,
                 status: 'inProcess',
-                contractAddress:null
+                contractAddress:null,
+                buyAvailable:true
             }                
             
             await models.MarketMakerContract.create(contractData)

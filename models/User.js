@@ -9,8 +9,8 @@ module.exports = (sequelize,DataTypes) =>{
         },
         walletAddress:{
             type:DataTypes.STRING,
-            unique:true,
-            allowNull:false
+            // unique:true,
+            // allowNull:false
         }
     })
 
@@ -21,7 +21,12 @@ module.exports = (sequelize,DataTypes) =>{
        })
        
        User.hasMany(models.MarketMakerContract,{
-        foreignKey:"userId",
+        foreignKey:"ownerId",
+        targetKey:"userId",
+       })
+
+       User.hasMany(models.MarketMakerContract,{
+        foreignKey:"createrId",
         targetKey:"userId",
        })
     }

@@ -14,6 +14,12 @@ module.exports = (sequelize,DataTypes)=>{
                 key:'userId'
             }
         },
+        txType:{
+            type:DataTypes.STRING,
+        },
+        txAmount:{
+            type:DataTypes.STRING,  
+        },
         sqlQuery:{
             type: DataTypes.STRING,
         },
@@ -25,5 +31,12 @@ module.exports = (sequelize,DataTypes)=>{
         }        
     })
 
+    Transaction.associate = (models)=>{
+        Transaction.belongsTo(models.MarketMakerContract,{
+            foreignKey:'txId'
+        })
+    }
+
     return Transaction
+    
 }
