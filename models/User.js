@@ -21,7 +21,12 @@ module.exports = (sequelize,DataTypes) =>{
        })
        
        User.hasMany(models.MarketMakerContract,{
-        foreignKey:"userId",
+        foreignKey:"ownerId",
+        targetKey:"userId",
+       })
+
+       User.hasMany(models.MarketMakerContract,{
+        foreignKey:"createrId",
         targetKey:"userId",
        })
     }

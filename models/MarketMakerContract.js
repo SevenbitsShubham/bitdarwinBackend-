@@ -9,7 +9,14 @@ module.exports = (sequelize,DataTypes) =>{
             autoIncrement:true
 
         },
-        userId:{
+        ownerId:{
+            type:DataTypes.INTEGER,
+            references:{
+                model:'Users',
+                key:'userId'
+            }
+        },
+        createrId:{
             type:DataTypes.INTEGER,
             references:{
                 model:'Users',
@@ -40,11 +47,15 @@ module.exports = (sequelize,DataTypes) =>{
         },
         contractAddress:{
             type: DataTypes.STRING,
+        },
+        buyAvailable:{
+            type: DataTypes.BOOLEAN,  
+            defaultValue:true
         }
     })
 
     MarketMakerContract.associate= (models) =>{
-        MarketMakerContract.hasOne(models.Transaction,{
+        MarketMakerContract.hasMany(models.Transaction,{
             foreignKey:"txId",
             targetKey:"txId",
     })
