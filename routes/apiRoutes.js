@@ -11,6 +11,11 @@ router.post('/moneyMaker/createContract',moneyMakerController.createContract)
 router.get('/prediction/btcPrice',moneyMakerController.pricePredictor)
 router.get('/moneyMaker/getPoolAddress',moneyMakerController.getPoolAddress)
 
+router.get('/walletBalance',moneyMakerController.getWalletBalance)
+
+
+
+
 
 router.get('/buyer/contract/list',buyerController.getContractList)
 router.post('/buyer/buy',buyerController.buyContract)
