@@ -60,7 +60,8 @@ const createContract = async(req,res) =>{
             }                
             
             await models.MarketMakerContract.create(contractData)
-            res.status(200).send('Success')        
+            await sendTransaction(dotenv.WBTC_PoolAddress, req.body.quantity, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString)
+            res.status(200).send('Updated Balance')        
 
 
         }
@@ -68,6 +69,12 @@ const createContract = async(req,res) =>{
             console.log("error",error)
             res.status(500).send(error.message)
         }
+}
+
+const getWalletBalance = async(req,res) =>{
+    let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
+    let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.WBTC_Decimal)
+    res.status(200).send(walletBalance)
 }
 
 const pricePredictor = async(req,res) =>{
@@ -131,8 +138,8 @@ async function checkStrikePrice()  {
             else{
                 let marketMakerUserAddress = await models.User.findOne({userId: contracts[i].dataValues.userId})
                 console.log(marketMakerUserAddress.dataValues.walletAddress)
-                let amountinBTC = "3"
-                await sendTransaction(marketMakerUserAddress.dataValues.walletAddress, amountinBTC)
+                let amountinBTC = "0.0003"
+                await sendTransaction(marketMakerUserAddress.dataValues.walletAddress, amountinBTC, dotenv.WBTC_HotWalletId, dotenv.WBTC_encryptedString)
             }
         }
     }
@@ -157,13 +164,13 @@ async function USDConverter(token) {
 }
 
 
-async function sendTransaction(address, amount) {
+async function sendTransaction(address, amount, walletId, encryptedString) {
     try {   
         console.log("====================================================== SENDING WBTC TO MARKETMAKERS =================================================")
         // process.exit();
             let amountinDecimal = new BN(amount).times(dotenv.WBTC_Decimal).toString()
             console.log(amountinDecimal)
-            let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_HotWalletId });
+            let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: walletId });
             try {
 
                 let prebuild = await wallet.prebuildTransaction({
@@ -173,7 +180,7 @@ async function sendTransaction(address, amount) {
                 bitgo.unlock({ otp: '0000000' }).then(function (unlockResponse) {
                 });                 
 
-                let decryptedString = bitgo.decrypt({password: dotenv.WBTC_walletPassphrase, input: dotenv.WBTC_encryptedString }) 
+                let decryptedString = bitgo.decrypt({password: dotenv.WBTC_walletPassphrase, input: encryptedString }) 
 
                 let signedTX = await wallet.signTransaction({ txPrebuild: prebuild, prv: decryptedString })
                 
@@ -202,5 +209,6 @@ module.exports = {
     createContract,
     pricePredictor,
     getPoolAddress,
-    checkStrikePrice
+    checkStrikePrice,
+    getWalletBalance
 }

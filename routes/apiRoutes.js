@@ -10,7 +10,9 @@ router.get('/test',(req,res)=>{
 router.post('/moneyMaker/createContract',moneyMakerController.createContract)
 router.get('/prediction/btcPrice',moneyMakerController.pricePredictor)
 router.get('/moneyMaker/getPoolAddress',moneyMakerController.getPoolAddress)
-// router.get('/', moneyMakerController.checkStrikePrice)
+
+router.get('/walletBalance',moneyMakerController.getWalletBalance)
+
 
 
 
