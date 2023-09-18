@@ -45,7 +45,7 @@ module.exports = (sequelize,DataTypes) =>{
         status:{
             type: DataTypes.STRING,
         },
-        contractAddress:{
+           contractAddress:{
             type: DataTypes.STRING,
         },
         buyAvailable:{
@@ -55,7 +55,7 @@ module.exports = (sequelize,DataTypes) =>{
     })
 
     MarketMakerContract.associate= (models) =>{
-        MarketMakerContract.hasMany(models.Transaction,{
+        MarketMakerContract.hasOne(models.Transaction,{
             foreignKey:"txId",
             targetKey:"txId",
     })
