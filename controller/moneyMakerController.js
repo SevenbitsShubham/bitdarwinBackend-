@@ -64,7 +64,7 @@ const createContract = async(req,res) =>{
             
             await models.MoneyMakerContract.create(contractData)
             console.log("log",req.body.quantity)
-            await sendTransaction(dotenv.WBTC_PoolAddress, req.body.quantity, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString)
+            await sendTransaction(dotenv.WBTC_PoolAddress, req.body.quantity, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString, dotenv.WBTC_UserWalletPassphrase)
             res.status(200).send('Updated Balance')        
 
 
@@ -148,7 +148,7 @@ async function checkStrikePrice()  {
                 let marketMakerUserAddress = await models.User.findOne({userId: contracts[i].dataValues.userId})
                 console.log(marketMakerUserAddress.dataValues.walletAddress)
                 let amountinBTC = "0.0003"
-                await sendTransaction(marketMakerUserAddress.dataValues.walletAddress, amountinBTC, dotenv.WBTC_HotWalletId, dotenv.WBTC_encryptedString)
+                await sendTransaction(marketMakerUserAddress.dataValues.walletAddress, amountinBTC, dotenv.WBTC_HotWalletId, dotenv.WBTC_encryptedString, dotenv.WBTC_walletPassphrase)
                 await models.MoneyMakerContract.update({
                     status:"processedWithAboveStrikePrice"
                 },{where:
@@ -179,7 +179,7 @@ async function USDConverter(token) {
 }
 
 
-async function sendTransaction(address, amount, walletId, encryptedString) {
+async function sendTransaction(address, amount, walletId, encryptedString, walletPassphrase) {
     try {   
         console.log("====================================================== SENDING WBTC TO MARKETMAKERS =================================================")
             let amountinDecimal = new BN(amount).times(dotenv.WBTC_Decimal).toString()
@@ -194,7 +194,7 @@ async function sendTransaction(address, amount, walletId, encryptedString) {
                 // bitgo.unlock({ otp: '0000000' }).then(function (unlockResponse) {
                 // });                 
 
-                let decryptedString = bitgo.decrypt({password: dotenv.WBTC_walletPassphrase, input: encryptedString }) 
+                let decryptedString = bitgo.decrypt({password: walletPassphrase, input: encryptedString }) 
 
                 let signedTX = await wallet.signTransaction({ txPrebuild: prebuild, prv: decryptedString })
                 
