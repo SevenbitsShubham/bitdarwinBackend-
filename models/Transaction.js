@@ -32,7 +32,7 @@ module.exports = (sequelize,DataTypes)=>{
     })
 
     Transaction.associate = (models)=>{
-        Transaction.belongsTo(models.MarketMakerContract,{
+        Transaction.belongsTo(models.MoneyMakerContract,{
             foreignKey:'txId'
         })
     }

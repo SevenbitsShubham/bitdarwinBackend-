@@ -4,7 +4,7 @@ const models = require('../models/index.js')
 
 const getContractList = async(req,res) =>{
     try{
-         let contractLists =  await models.MarketMakerContract.findAll({
+         let contractLists =  await models.MoneyMakerContract.findAll({
             where:{
                 buyAvailable:true,
                 status:"inprocess"
@@ -38,7 +38,7 @@ const buyContract  = async(req,res) =>{
         let transaction =  await models.Transaction.create({userId:user.userId,txType:'buy',txAmount:req.body.txAmount})
         console.log("log2")
         //check if contract is present
-        let contract = await models.MarketMakerContract.findOne({
+        let contract = await models.MoneyMakerContract.findOne({
             where:{id:req.body.contractId}})        
             console.log("log3")    
         //if contract not present give error
@@ -52,7 +52,7 @@ const buyContract  = async(req,res) =>{
             txId:transaction.txId,
             buyAvailable:false
         }
-        await models.MarketMakerContract.update(updateContractData,{
+        await models.MoneyMakerContract.update(updateContractData,{
             where:{
             id:req.body.contractId
             }
@@ -67,7 +67,88 @@ const buyContract  = async(req,res) =>{
     }
 }
 
+const registerNewBuyer = async(req,res)=>{
+   try{
+        if(!req.body.walletAddress){
+            throw new Error("Please provide valid inputs.")
+        }
+
+        let user = await models.User.findOne({
+            where:{
+                walletAddress: req.body.walletAddress 
+            }
+        })
+
+        if(!user){
+            await models.User.create({
+                walletAddress: req.body.walletAddress 
+            })
+            res.status(200).send("Success")            
+        }
+        else{
+            res.status(200).send("User already present")            
+        }
+   }
+   catch(error){
+        console.log("error",error)
+        res.status(500).send(error.message)
+   }  
+}
+
+
+const getBuyerContracts = async(req,res) =>{
+    try{
+        if(!req.body.contractType || !req.body.contractstatus || !req.body.walletAddress){
+            throw new Error("Enter valid inputs.")
+        }
+
+        let user= await models.User.findOne({
+            where:{
+                walletAddress:req.body.walletAddress
+            }
+        })
+
+        //if user is not present throw errror
+        if(!user){
+            throw new Error("User is not present.")
+        }
+
+        let contractList =[]
+        //get contract list 
+        if(req.body.contractType === 'moneyMaker'){
+            if(req.body.contractstatus === 'all'){
+                contractList= await models.MoneyMakerContract.findAll({
+                    where:{
+                        ownerId:user.userId,
+                    }
+                })
+            }
+            else{
+                if(req.body.contractstatus==='inactive'){
+                    req.body.contractstatus = ['processedWithAboveStrikePrice','processedWithBelowStrikePrice']
+                }
+                
+
+                contractList= await models.MoneyMakerContract.findAll({
+                    where:{
+                        ownerId:user.userId,
+                        status: req.body.contractstatus
+                    }
+                })
+            }
+        }
+        
+        res.status(200).json({contractType:req.body.contractType,contractList})
+    }
+    catch(error){
+        console.log("error",error)
+        res.status(500).send(error.message)
+    }
+}
+
 module.exports ={
     getContractList,
-    buyContract
+    buyContract,
+    getBuyerContracts,
+    registerNewBuyer
 }

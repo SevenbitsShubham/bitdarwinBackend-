@@ -2,7 +2,7 @@ const sequelize = require('sequelize');
 const Transaction = require('./Transaction');
 
 module.exports = (sequelize,DataTypes) =>{
-    const MarketMakerContract = sequelize.define("MarketMakerContract",{
+    const MoneyMakerContract = sequelize.define("MoneyMakerContract",{
         id:{
             type: DataTypes.INTEGER,
             primaryKey:true,
@@ -42,10 +42,25 @@ module.exports = (sequelize,DataTypes) =>{
         expirationDate:{
             type: DataTypes.DATE,
         },
-        status:{
+        quantity:{
+            type: DataTypes.FLOAT,  
+        },
+        currency:{
             type: DataTypes.STRING,
         },
-           contractAddress:{
+        deployment:{
+            type: DataTypes.STRING,
+            validate:{
+                isIn:[['BitGo','ICP']]
+            }
+        },
+        status:{
+            type: DataTypes.STRING,
+            validate:{
+                isIn:[['pending','inprocess','processedWithAboveStrikePrice','processedWithBelowStrikePrice']]
+            }
+        },
+        contractAddress:{
             type: DataTypes.STRING,
         },
         buyAvailable:{
@@ -54,12 +69,12 @@ module.exports = (sequelize,DataTypes) =>{
         }
     })
 
-    MarketMakerContract.associate= (models) =>{
-        MarketMakerContract.hasOne(models.Transaction,{
+    MoneyMakerContract.associate= (models) =>{
+        MoneyMakerContract.hasOne(models.Transaction,{
             foreignKey:"txId",
             targetKey:"txId",
     })
     }
 
-    return MarketMakerContract
+    return MoneyMakerContract
 }

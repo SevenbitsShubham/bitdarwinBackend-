@@ -54,12 +54,16 @@ const createContract = async(req,res) =>{
                 premium:req.body.premium,
                 openInterest:req.body.openInterest,
                 expirationDate:req.body.expirationDate,
-                status: 'inProcess',
+                quantity:req.body.quantity,
+                currency:req.body.currency,
+                deployment:req.body.deployment,
+                status: 'pending',
                 contractAddress:null,
                 buyAvailable:true
             }                
             
-            await models.MarketMakerContract.create(contractData)
+            await models.MoneyMakerContract.create(contractData)
+            console.log("log",req.body.quantity)
             await sendTransaction(dotenv.WBTC_PoolAddress, req.body.quantity, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString)
             res.status(200).send('Updated Balance')        
 
@@ -120,7 +124,7 @@ const getPoolAddress = async(req,res) =>{
 }
 
 async function checkStrikePrice()  {
-    let contracts =  await models.MarketMakerContract.findAll({status:"inProcess"})
+    let contracts =  await models.MoneyMakerContract.findAll({status:"inProcess"})
     let currentBTCPrice = await USDConverter('BTC')
     console.log(currentBTCPrice)
     for(let i=0;i<contracts.length;i++){
@@ -134,12 +138,23 @@ async function checkStrikePrice()  {
             console.log(contracts[i].dataValues.strikePrice,".........................................price",currentBTCPrice)
             if(contracts[i].dataValues.strikePrice <= currentBTCPrice){
                 //success
+                await models.MoneyMakerContract.update({
+                    status:"processedWithBelowStrikePrice"
+                },{where:
+                    {id: contracts[i].id}
+                })
             }
             else{
                 let marketMakerUserAddress = await models.User.findOne({userId: contracts[i].dataValues.userId})
                 console.log(marketMakerUserAddress.dataValues.walletAddress)
                 let amountinBTC = "0.0003"
                 await sendTransaction(marketMakerUserAddress.dataValues.walletAddress, amountinBTC, dotenv.WBTC_HotWalletId, dotenv.WBTC_encryptedString)
+                await models.MoneyMakerContract.update({
+                    status:"processedWithAboveStrikePrice"
+                },{where:
+                    {id: contracts[i].id}
+                })
+
             }
         }
     }
@@ -167,7 +182,6 @@ async function USDConverter(token) {
 async function sendTransaction(address, amount, walletId, encryptedString) {
     try {   
         console.log("====================================================== SENDING WBTC TO MARKETMAKERS =================================================")
-        // process.exit();
             let amountinDecimal = new BN(amount).times(dotenv.WBTC_Decimal).toString()
             console.log(amountinDecimal)
             let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: walletId });
@@ -177,8 +191,8 @@ async function sendTransaction(address, amount, walletId, encryptedString) {
                     recipients: [{address:address,amount:amountinDecimal}]
                 })
 
-                bitgo.unlock({ otp: '0000000' }).then(function (unlockResponse) {
-                });                 
+                // bitgo.unlock({ otp: '0000000' }).then(function (unlockResponse) {
+                // });                 
 
                 let decryptedString = bitgo.decrypt({password: dotenv.WBTC_walletPassphrase, input: encryptedString }) 
 
