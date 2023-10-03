@@ -14,7 +14,7 @@ app.use(express.urlencoded({extended:true}))
 app.use(express.json())
 app.use('/api',apiRouter)
 
-// cron.schedule("*/15 * * * * *", moneyMakerController.checkStrikePrice)
+cron.schedule("*/15 * * * * *", moneyMakerController.checkStrikePrice)
 
 
 // db.sequelize.sync({alter:true}).then(()=>{
