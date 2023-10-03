@@ -11,10 +11,10 @@ router.get('/test',(req,res)=>{
 router.post('/moneyMaker/createContract',moneyMakerController.createContract)
 router.get('/prediction/btcPrice',moneyMakerController.pricePredictor)
 router.get('/moneyMaker/getPoolAddress',moneyMakerController.getPoolAddress)
-router.get('/moneyMaker/walletBalance',moneyMakerController.getWalletBalance)
+router.post('/moneyMaker/walletBalance',moneyMakerController.getWalletBalance)
 
 //buyer and explorer routes
-router.get('/buyer/contract/list',buyerController.getContractList)
+router.post('/buyer/contract/list',buyerController.getContractList)
 router.post('/buyer/buy',buyerController.buyContract)
 router.post('/buyer/ownerContractList',buyerController.getBuyerContracts)
 router.post('/buyer/register',buyerController.registerNewBuyer)

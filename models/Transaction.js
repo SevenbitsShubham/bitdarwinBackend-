@@ -21,10 +21,10 @@ module.exports = (sequelize,DataTypes)=>{
             type:DataTypes.STRING,  
         },
         sqlQuery:{
-            type: DataTypes.STRING,
+            type: DataTypes.TEXT,
         },
         queryHex:{
-            type: DataTypes.STRING,
+            type: DataTypes.TEXT,
         },
         signature:{
             type: DataTypes.STRING,

@@ -48,10 +48,37 @@ module.exports = (sequelize,DataTypes) =>{
         currency:{
             type: DataTypes.STRING,
         },
+        title:{
+            type: DataTypes.STRING,
+        },
+        buyer:{
+            type: DataTypes.STRING,
+        },
+        seller:{
+            type: DataTypes.STRING,
+        },
+        governingLaw:{
+            type: DataTypes.STRING,
+        },
+        propertyAddress:{
+            type: DataTypes.STRING,
+        },
+        sellingPrice:{
+            type: DataTypes.FLOAT,
+        },
+        terms:{
+            type: DataTypes.STRING,
+        },
         deployment:{
             type: DataTypes.STRING,
             validate:{
                 isIn:[['BitGo','ICP']]
+            }
+        },
+        contractType:{
+            type: DataTypes.STRING,
+            validate:{
+                isIn:[['MoneyMaker','HousingContract' ]]
             }
         },
         status:{
@@ -66,6 +93,9 @@ module.exports = (sequelize,DataTypes) =>{
         buyAvailable:{
             type: DataTypes.BOOLEAN,  
             defaultValue:true
+        },
+        contract:{
+            type: DataTypes.TEXT
         }
     })
 

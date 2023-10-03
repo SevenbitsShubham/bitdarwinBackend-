@@ -5,6 +5,7 @@ const BN = require("bignumber.js")
 const BitGo = require('bitgo');
 const dotenv = require("dotenv").config().parsed;
 const bitgo = new BitGo.BitGo({accessToken:dotenv.BITGO_AccessToken}); // defaults to testnet. add env: 'prod' if you want to go against mainnet
+const ic = require('ic0');
 
 const CoinMarketCap = require('coinmarketcap-api')
 const client = new CoinMarketCap(dotenv.COINMARKETCAP_ApiKey);
@@ -23,7 +24,7 @@ cloudinary.config({
 const createContract = async(req,res) =>{
         try{
             //initial parameter validation
-            if(!req.body.walletAddress || !req.body.strikePrice || !req.body.premium || !req.body.openInterest || !req.body.expirationDate || !req.body.query || !req.body.hex || !req.body.signature ){
+            if(!req.body.walletAddress || !req.body.expirationDate || !req.body.query || !req.body.hex || !req.body.signature || !req.body.contractType){
                  throw new Error("Valid parameters are required.")   
             }
 
@@ -36,37 +37,97 @@ const createContract = async(req,res) =>{
             }
 
             //if found add transaction details
-            let transactionData = {
-                userId:user.userId,
-                sqlQuery:req.body.query,
-                queryHex:req.body.hex,
-                signature:req.body.signature,
-                tyType:'moneyMaker'
+            let transactionData
+            if(req.body.contractType === 'MoneyMaker'){
+                transactionData = {
+                    userId:user.userId,
+                    sqlQuery:req.body.query,
+                    queryHex:req.body.hex,
+                    signature:req.body.signature,
+                    txType: 'MoneyMaker' 
+                }
+            }
+            else{
+                transactionData = {
+                    userId:user.userId,
+                    sqlQuery:req.body.query,
+                    queryHex:req.body.hex,
+                    signature:req.body.signature,
+                    txType: 'HousingContract'
+                }
             }
             let newTransaction = await models.Transaction.create(transactionData)
 
+            let contractData
+            let newBalance
+            if(req.body.contractType === 'MoneyMaker'){
+                let newContractAddress
+               if(req.body.deployment === 'ICP'){
+                newContractAddress = await createIcpContract(req.body,'create_contract')
+                console.log("debig67",newContractAddress,newContractAddress.toString())
+               } 
+               else{
+                newContractAddress =  `0xb${(+newTransaction.txId)*100}f5ea0ba39494ce839613fffba7427****${(+newTransaction.txId)*100}`
+               }
+            let newBalance = +user.balance - +req.body.quantity   
+            await models.User.update(
+                {
+                    balance: newBalance
+                },
+                {
+                    where:{
+                        walletAddress:req.body.walletAddress 
+                }}
+            )
             //add contract details
-            let contractData = {
-                ownerId: user.userId,
-                createrId: user.userId,
-                txId: newTransaction.txId,
-                strikePrice:req.body.strikePrice,
-                premium:req.body.premium,
-                openInterest:req.body.openInterest,
-                expirationDate:req.body.expirationDate,
-                quantity:req.body.quantity,
-                currency:req.body.currency,
-                deployment:req.body.deployment,
-                status: 'pending',
-                contractAddress:null,
-                buyAvailable:true
-            }                
+                 contractData = {
+                    ownerId: user.userId,
+                    createrId: user.userId,
+                    txId: newTransaction.txId,
+                    strikePrice:req.body.strikePrice,
+                    premium:req.body.premium,
+                    openInterest:req.body.openInterest,
+                    expirationDate:req.body.expirationDate,
+                    quantity:req.body.quantity,
+                    currency:req.body.currency,
+                    deployment:req.body.deployment,
+                    status: 'inprocess',   //
+                    contractAddress:null,
+                    buyAvailable:true,
+                    contractType:req.body.contractType,
+                    contractAddress:newContractAddress //
+                }                
+            }
+            else{
+                contractData = {
+                    ownerId: user.userId,
+                    createrId: user.userId,
+                    txId: newTransaction.txId,
+                    title:req.body.title,
+                    buyer:req.body.buyer,
+                    seller:req.body.seller,
+                    governingLaw:req.body.governingLaw,
+                    propertyAddress:req.body.propertyAddress,
+                    sellingPrice:req.body.sellingPrice,
+                    terms:req.body.terms,
+                    expirationDate:req.body.expirationDate,
+                    deployment:req.body.deployment,
+                    status: 'inprocess',
+                    premium:10,
+                    contractAddress:null,
+                    buyAvailable:true,
+                    contractType:req.body.contractType,
+                    contractAddress:"0xb794f5ea0ba39494ce839613fffba7427****268",
+                    contract:req.body.contract
+                } 
+            }
+            // console.log("debug1",contractData)
             
             await models.MoneyMakerContract.create(contractData)
-            console.log("log",req.body.quantity)
-            await sendTransaction(dotenv.WBTC_PoolAddress, req.body.quantity, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString)
-            res.status(200).send('Updated Balance')        
-
+            // console.log("log",req.body.quantity)
+            // await sendTransaction(dotenv.WBTC_PoolAddress, req.body.quantity, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString)
+            
+                res.status(200).json({status:"success"}) 
 
         }
         catch(error){
@@ -75,10 +136,32 @@ const createContract = async(req,res) =>{
         }
 }
 
+const createIcpContract = async(contractParams,methodName) =>{
+    let canisterId = process.env.CANISTER_ID
+    let canisterInstance = ic(canisterId)
+    let response = await canisterInstance.call(methodName,{strike_price:parseInt(contractParams.strikePrice), premium:parseInt(contractParams.premium), owner:contractParams.walletAddress, exercised:false, holder:contractParams.walletAddress, expiration_date:1, btc_quantity:1, open_interest:parseInt(contractParams.openInterest)})   
+    console.log("response",response)
+    return response
+}
+
 const getWalletBalance = async(req,res) =>{
-    let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
-    let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.WBTC_Decimal)
-    res.status(200).send(walletBalance)
+    try{
+        // let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
+        // let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.WBTC_Decimal)
+        if(!req.body.walletAddress){
+            throw new Error("Invalid inputs.")
+        }
+        let reqBalance = 0
+        let user =  await models.User.findOne({walletAddress:req.body.walletAddress})
+        if(user){
+            reqBalance=user.balance
+        }
+        res.status(200).json({walletBalance:reqBalance})
+    }
+    catch(error){
+        console.log("error",error)
+        res.status(500).send(error.message)
+    }
 }
 
 const pricePredictor = async(req,res) =>{

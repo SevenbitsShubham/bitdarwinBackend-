@@ -4,12 +4,17 @@ const models = require('../models/index.js')
 
 const getContractList = async(req,res) =>{
     try{
+        if(!req.body.contractType){
+            throw new Error("Invalid input parameters.")
+        }
+
          let contractLists =  await models.MoneyMakerContract.findAll({
             where:{
                 buyAvailable:true,
-                status:"inprocess"
+                status:"inprocess",
+                contractType:req.body.contractType
             },
-            attributes:['id','strikePrice','premium','openInterest','expirationDate','contractAddress']
+            attributes:['id','strikePrice','premium','openInterest','expirationDate','contractAddress','quantity','currency','title','buyer','seller','governingLaw','propertyAddress','sellingPrice','terms','contractType']
          })
          res.status(200).json({contractLists})   
     }
@@ -115,11 +120,12 @@ const getBuyerContracts = async(req,res) =>{
 
         let contractList =[]
         //get contract list 
-        if(req.body.contractType === 'moneyMaker'){
+        // if(req.body.contractType === 'MoneyMaker'){
             if(req.body.contractstatus === 'all'){
                 contractList= await models.MoneyMakerContract.findAll({
                     where:{
                         ownerId:user.userId,
+                        contractType:req.body.contractType
                     }
                 })
             }
@@ -132,11 +138,12 @@ const getBuyerContracts = async(req,res) =>{
                 contractList= await models.MoneyMakerContract.findAll({
                     where:{
                         ownerId:user.userId,
+                        contractType:req.body.contractType,
                         status: req.body.contractstatus
                     }
                 })
             }
-        }
+        // }
         
         res.status(200).json({contractType:req.body.contractType,contractList})
     }
