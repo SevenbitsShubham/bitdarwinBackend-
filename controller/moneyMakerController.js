@@ -5,6 +5,7 @@ const BN = require("bignumber.js")
 const BitGo = require('bitgo');
 const dotenv = require("dotenv").config().parsed;
 const bitgo = new BitGo.BitGo({accessToken:dotenv.BITGO_AccessToken}); // defaults to testnet. add env: 'prod' if you want to go against mainnet
+const Web3 = require('web3')
 const ic = require('ic0');
 
 const CoinMarketCap = require('coinmarketcap-api')
@@ -19,7 +20,8 @@ cloudinary.config({
     api_key: process.env.API_KEY,
     api_secret: process.env.API_SECRET,
   });
-  
+
+let web3 = new Web3(`https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`)  
 
 const createContract = async(req,res) =>{
         try{
@@ -38,7 +40,10 @@ const createContract = async(req,res) =>{
 
             //if found add transaction details
             let transactionData
+            let poolTxStatus
             if(req.body.contractType === 'MoneyMaker'){
+            poolTxStatus = await sendTransaction(dotenv.WBTC_PoolAddress, req.body.quantity, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString, dotenv.WBTC_UserWalletPassphrase)
+            console.log("debug5",bitgoTx)
                 transactionData = {
                     userId:user.userId,
                     sqlQuery:req.body.query,
@@ -48,6 +53,7 @@ const createContract = async(req,res) =>{
                 }
             }
             else{
+                poolTxStatus = null
                 transactionData = {
                     userId:user.userId,
                     sqlQuery:req.body.query,
@@ -59,7 +65,7 @@ const createContract = async(req,res) =>{
             let newTransaction = await models.Transaction.create(transactionData)
 
             let contractData
-            let newBalance
+            
             if(req.body.contractType === 'MoneyMaker'){
                 let newContractAddress
                if(req.body.deployment === 'ICP'){
@@ -69,16 +75,7 @@ const createContract = async(req,res) =>{
                else{
                 newContractAddress =  `0xb${(+newTransaction.txId)*100}f5ea0ba39494ce839613fffba7427****${(+newTransaction.txId)*100}`
                }
-            let newBalance = +user.balance - +req.body.quantity   
-            await models.User.update(
-                {
-                    balance: newBalance
-                },
-                {
-                    where:{
-                        walletAddress:req.body.walletAddress 
-                }}
-            )
+            
             //add contract details
                  contractData = {
                     ownerId: user.userId,
@@ -97,6 +94,7 @@ const createContract = async(req,res) =>{
                     contractType:req.body.contractType,
                     contractAddress:newContractAddress //
                 }                
+                
             }
             else{
                 contractData = {
@@ -125,9 +123,8 @@ const createContract = async(req,res) =>{
             
             await models.MoneyMakerContract.create(contractData)
             // console.log("log",req.body.quantity)
-            // await sendTransaction(dotenv.WBTC_PoolAddress, req.body.quantity, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString, dotenv.WBTC_UserWalletPassphrase)
-            res.status(200).send('Updated Balance')        
-
+            
+            res.status(200).send('Success')        
 
         }
         catch(error){
@@ -146,17 +143,18 @@ const createIcpContract = async(contractParams,methodName) =>{
 
 const getWalletBalance = async(req,res) =>{
     try{
-        // let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
-        // let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.WBTC_Decimal)
-        if(!req.body.walletAddress){
-            throw new Error("Invalid inputs.")
-        }
-        let reqBalance = 0
-        let user =  await models.User.findOne({walletAddress:req.body.walletAddress})
-        if(user){
-            reqBalance=user.balance
-        }
-        res.status(200).json({walletBalance:reqBalance})
+        let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
+        let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.WBTC_Decimal)
+        // if(!req.body.walletAddress){
+        //     throw new Error("Invalid inputs.")
+        // }
+        // let reqBalance = 0
+        // let user =  await models.User.findOne({walletAddress:req.body.walletAddress})
+        // if(user){
+        //     reqBalance=user.balance
+        // }
+        // res.status(200).json({walletBalance:reqBalance})
+        res.status(200).json({walletBalance:walletBalance})
     }
     catch(error){
         console.log("error",error)
@@ -285,13 +283,31 @@ async function sendTransaction(address, amount, walletId, encryptedString, walle
                     halfSigned: signedTX.halfSigned
                 })
 
-                let payload = {
-                    Currency: dotenv.WBTC_Currency,
-                    TransactionHash: sendTransaction.txid,
-                }
+                let txStatus= await new Promise((resolve,reject)=>{
+                    let count =1
+                    let txInterval = setInterval(async()=>{
+                        let result= await web3.eth.getTransactionReceipt(sendTransaction.txid)     
+                        
+                        // console.log('result',result,count)
+                        if(result?.status){
+                            resolve('Success')
+                            clearInterval(txInterval)
+                        }
 
-                console.table(payload)
-            
+                        if(count === 6 ){
+                            resolve('Pending') 
+                            clearInterval(txInterval)
+                        }
+
+                        count++                        
+                    },10000)                    
+                })
+                // console.log("debug7",txStatus)
+                let payload = {
+                    TransactionHash: sendTransaction.txid,
+                    status: txStatus
+                }
+                return payload
             } catch (error) {
                 console.log(error)
             }
