@@ -14,11 +14,21 @@ module.exports = (sequelize,DataTypes)=>{
                 key:'userId'
             }
         },
+        contractId:{
+            type:DataTypes.INTEGER,
+            references:{
+                model:'MoneyMakerContracts',
+                key:'id'
+            }
+        },
         txType:{
             type:DataTypes.STRING,
         },
         txAmount:{
             type:DataTypes.STRING,  
+        },
+        fees:{
+            type:DataTypes.FLOAT,
         },
         sqlQuery:{
             type: DataTypes.TEXT,
@@ -28,13 +38,25 @@ module.exports = (sequelize,DataTypes)=>{
         },
         signature:{
             type: DataTypes.STRING,
+        },
+        txHash:{
+            type: DataTypes.TEXT,
+        },
+        status:{
+            type: DataTypes.STRING,
         }        
     })
 
     Transaction.associate = (models)=>{
         Transaction.belongsTo(models.MoneyMakerContract,{
-            foreignKey:'txId'
+            foreignKey:"contractId",
+            targetKey:"id",
         })
+
+        Transaction.belongsTo(models.User,{
+            foreignKey:"userId",
+            targetKey:"userId",
+           })
     }
 
     return Transaction

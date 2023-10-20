@@ -11,7 +11,7 @@ const getContractList = async(req,res) =>{
          let contractLists =  await models.MoneyMakerContract.findAll({
             where:{
                 buyAvailable:true,
-                status:"inprocess",
+                status:["inprocess","inprocess-resell"],
                 contractType:req.body.contractType
             },
             attributes:['id','strikePrice','premium','openInterest','expirationDate','contractAddress','quantity','currency','title','buyer','seller','governingLaw','propertyAddress','sellingPrice','terms','contractType']
@@ -38,10 +38,10 @@ const buyContract  = async(req,res) =>{
         if(!user){
             user = await models.User.create({walletAddress:req.body.userWalletAddress})
         }
-        console.log("log1")
+
         //create a new transaction
         let transaction =  await models.Transaction.create({userId:user.userId,txType:'buy',txAmount:req.body.txAmount})
-        console.log("log2")
+
         //check if contract is present
         let contract = await models.MoneyMakerContract.findOne({
             where:{id:req.body.contractId}})        
@@ -50,6 +50,10 @@ const buyContract  = async(req,res) =>{
         if(!contract){
             throw new Error("Contract is not present.")
         }
+
+        // if(contract.deployment === 'ICP'){
+
+        // }
 
         //if contract present then update contract
         let updateContractData = {
@@ -72,7 +76,7 @@ const buyContract  = async(req,res) =>{
     }
 }
 
-const registerNewBuyer = async(req,res)=>{
+const checkUserRegistration = async(req,res)=>{
    try{
         if(!req.body.walletAddress){
             throw new Error("Please provide valid inputs.")
@@ -153,9 +157,67 @@ const getBuyerContracts = async(req,res) =>{
     }
 }
 
+const contractResell = async(req,res) =>{
+    try{
+        //input validation for contract address
+       if(!req.body.contractAddress || !req.body.walletAddress){
+           throw new Error("Please provide valid inputs.") 
+       } 
+
+       //get contract info
+       let contract = await models.MoneyMakerContract.findOne({
+            where:{
+                contractAddress: req.body.contractAddress
+            },
+            include:[{
+                model: models.User,
+                as: 'OwnerId'
+            },{
+                
+                model: models.User,
+                as: 'CreaterId'
+            }
+        ]
+       })
+
+
+       //check if contract is valid
+       if(!contract){
+           throw new Error("Invalid contract.") 
+       }
+
+       //check whether user is owner of the contract
+       if(req.body.walletAddress !== contract.OwnerId.walletAddress){
+           throw new Error("Invalid ownership.") 
+       }
+
+       //check if contract is not expired
+       if(contract.status !== 'inprocess'){
+        throw new Error("Contract is unavailable for resell.") 
+        }
+       //change buyAvailable value in contract
+       await models.MoneyMakerContract.update({
+            buyAvailable:1,
+            status: 'inprocess-resell'
+       },{
+        where:{
+            contractAddress: req.body.contractAddress            
+        }
+       }) 
+
+       res.status(200).send("success")
+       
+    }
+    catch(error){
+        console.log("error",error)
+        res.status(500).send(error.message)
+    }
+}
+
 module.exports ={
     getContractList,
     buyContract,
     getBuyerContracts,
-    registerNewBuyer
+    checkUserRegistration,
+    contractResell
 }

@@ -23,13 +23,6 @@ module.exports = (sequelize,DataTypes) =>{
                 key:'userId'
             }
         },
-        txId:{
-            type: DataTypes.INTEGER,
-            references:{
-                model:'Transactions',
-                key:'txId'
-            }
-        },
         strikePrice:{
             type: DataTypes.INTEGER,
         },
@@ -84,7 +77,7 @@ module.exports = (sequelize,DataTypes) =>{
         status:{
             type: DataTypes.STRING,
             validate:{
-                isIn:[['pending','inprocess','processedWithAboveStrikePrice','processedWithBelowStrikePrice']]
+                isIn:[['pending','inprocess','inprocess-resell','processedWithAboveStrikePrice','processedWithBelowStrikePrice']]
             }
         },
         contractAddress:{
@@ -100,10 +93,22 @@ module.exports = (sequelize,DataTypes) =>{
     })
 
     MoneyMakerContract.associate= (models) =>{
-        MoneyMakerContract.hasOne(models.Transaction,{
-            foreignKey:"txId",
-            targetKey:"txId",
-    })
+        MoneyMakerContract.hasMany(models.Transaction,{
+            foreignKey:"contractId",
+            targetKey:"id",
+        })
+        
+        MoneyMakerContract.belongsTo(models.User,{
+            foreignKey:"ownerId",
+            targetKey:"userId",
+            as: 'OwnerId'
+        })
+
+        MoneyMakerContract.belongsTo(models.User,{
+            foreignKey:"createrId",
+            targetKey:"userId",
+            as: 'CreaterId'
+        })
     }
 
     return MoneyMakerContract

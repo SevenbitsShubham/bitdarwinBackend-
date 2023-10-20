@@ -6,7 +6,7 @@ const BitGo = require('bitgo');
 const dotenv = require("dotenv").config().parsed;
 const bitgo = new BitGo.BitGo({accessToken:dotenv.BITGO_AccessToken}); // defaults to testnet. add env: 'prod' if you want to go against mainnet
 const Web3 = require('web3')
-const ic = require('ic0');
+const icpMethods = require('../helper/icpMethods.js')
 
 const CoinMarketCap = require('coinmarketcap-api')
 const client = new CoinMarketCap(dotenv.COINMARKETCAP_ApiKey);
@@ -20,18 +20,23 @@ cloudinary.config({
     api_key: process.env.API_KEY,
     api_secret: process.env.API_SECRET,
   });
+  let bitgoContractCount = 0
 
 let web3 = new Web3(`https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`)  
 
 const createContract = async(req,res) =>{
         try{
             //initial parameter validation
-            if(!req.body.walletAddress || !req.body.expirationDate || !req.body.query || !req.body.hex || !req.body.signature || !req.body.contractType){
+            if(!req.body.walletAddress || !req.body.expirationDate || !req.body.query || !req.body.hex || !req.body.signature || !req.body.contractType ){
                  throw new Error("Valid parameters are required.")   
             }
 
             //find user in db
-            let user =  await models.User.findOne({walletAddress:req.body.walletAddress})
+            let user =  await models.User.findOne({
+               where:{     
+                walletAddress:req.body.walletAddress
+               }
+            })
 
             //if user not found add user in db
             if(!user){
@@ -41,46 +46,39 @@ const createContract = async(req,res) =>{
             //if found add transaction details
             let transactionData
             let poolTxStatus
-            if(req.body.contractType === 'MoneyMaker'){
-            poolTxStatus = await sendTransaction(dotenv.WBTC_PoolAddress, req.body.quantity, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString, dotenv.WBTC_UserWalletPassphrase)
-            console.log("debug5",bitgoTx)
-                transactionData = {
-                    userId:user.userId,
-                    sqlQuery:req.body.query,
-                    queryHex:req.body.hex,
-                    signature:req.body.signature,
-                    txType: 'MoneyMaker' 
-                }
-            }
-            else{
-                poolTxStatus = null
-                transactionData = {
-                    userId:user.userId,
-                    sqlQuery:req.body.query,
-                    queryHex:req.body.hex,
-                    signature:req.body.signature,
-                    txType: 'HousingContract'
-                }
-            }
-            let newTransaction = await models.Transaction.create(transactionData)
-
             let contractData
             
             if(req.body.contractType === 'MoneyMaker'){
                 let newContractAddress
                if(req.body.deployment === 'ICP'){
-                newContractAddress = await createIcpContract(req.body,'create_contract')
-                console.log("debig67",newContractAddress,newContractAddress.toString())
+                newContractAddress = await icpMethods.createIcpContract(req.body)
                } 
                else{
-                newContractAddress =  `0xb${(+newTransaction.txId)*100}f5ea0ba39494ce839613fffba7427****${(+newTransaction.txId)*100}`
+                newContractAddress =  `0xb${bitgoContractCount}f5ea0ba39494ce839613fffba7427****${bitgoContractCount*100}`
+                ++bitgoContractCount
                }
+
+
+               if(!req.body.txHash){
+                    throw new Error("TxHash is required.")
+               }
+
+               let reqTx = await models.Transaction.findOne({
+                where:{
+                    txHash: req.body.txHash
+                }
+               })
+
+               if(reqTx.contractId){
+                   throw new Error("Deposit transaction for the contract is already used, invalid deposit transaction.") 
+               }
+
+               
             
             //add contract details
                  contractData = {
                     ownerId: user.userId,
                     createrId: user.userId,
-                    txId: newTransaction.txId,
                     strikePrice:req.body.strikePrice,
                     premium:req.body.premium,
                     openInterest:req.body.openInterest,
@@ -100,7 +98,6 @@ const createContract = async(req,res) =>{
                 contractData = {
                     ownerId: user.userId,
                     createrId: user.userId,
-                    txId: newTransaction.txId,
                     title:req.body.title,
                     buyer:req.body.buyer,
                     seller:req.body.seller,
@@ -119,11 +116,38 @@ const createContract = async(req,res) =>{
                     contract:req.body.contract
                 } 
             }
-            // console.log("debug1",contractData)
             
-            await models.MoneyMakerContract.create(contractData)
-            // console.log("log",req.body.quantity)
+            let newContract= await models.MoneyMakerContract.create(contractData)
             
+            if(req.body.contractType === 'MoneyMaker'){
+                    await models.Transaction.update({
+                        contractId:newContract.id
+                    },{
+                        where:{txHash: req.body.txHash}
+                    })
+    
+                    transactionData = {
+                        userId:user.userId,
+                        contractId:newContract.id,
+                        sqlQuery:req.body.query,
+                        queryHex:req.body.hex,
+                        signature:req.body.signature,
+                        txType: 'MoneyMaker' 
+                    }
+                }
+                else{
+                    poolTxStatus = null
+                    transactionData = {
+                        userId:user.userId,
+                        contractId:newContract.id,
+                        sqlQuery:req.body.query,
+                        queryHex:req.body.hex,
+                        signature:req.body.signature,
+                        txType: 'HousingContract'
+                    }
+                }
+            await models.Transaction.create(transactionData)
+
             res.status(200).send('Success')        
 
         }
@@ -133,27 +157,11 @@ const createContract = async(req,res) =>{
         }
 }
 
-const createIcpContract = async(contractParams,methodName) =>{
-    let canisterId = process.env.CANISTER_ID
-    let canisterInstance = ic(canisterId)
-    let response = await canisterInstance.call(methodName,{strike_price:parseInt(contractParams.strikePrice), premium:parseInt(contractParams.premium), owner:contractParams.walletAddress, exercised:false, holder:contractParams.walletAddress, expiration_date:1, btc_quantity:1, open_interest:parseInt(contractParams.openInterest)})   
-    console.log("response",response)
-    return response
-}
 
 const getWalletBalance = async(req,res) =>{
     try{
         let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
         let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.WBTC_Decimal)
-        // if(!req.body.walletAddress){
-        //     throw new Error("Invalid inputs.")
-        // }
-        // let reqBalance = 0
-        // let user =  await models.User.findOne({walletAddress:req.body.walletAddress})
-        // if(user){
-        //     reqBalance=user.balance
-        // }
-        // res.status(200).json({walletBalance:reqBalance})
         res.status(200).json({walletBalance:walletBalance})
     }
     catch(error){
@@ -198,7 +206,7 @@ const pricePredictor = async(req,res) =>{
 
 const getPoolAddress = async(req,res) =>{
     try {
-        res.status(200).json({poolAddress:process.env.POOL_ADDRESS})
+        res.status(200).json({poolAddress:process.env.WBTC_PoolAddress})
     } catch (error) {
         
     }
@@ -283,25 +291,7 @@ async function sendTransaction(address, amount, walletId, encryptedString, walle
                     halfSigned: signedTX.halfSigned
                 })
 
-                let txStatus= await new Promise((resolve,reject)=>{
-                    let count =1
-                    let txInterval = setInterval(async()=>{
-                        let result= await web3.eth.getTransactionReceipt(sendTransaction.txid)     
-                        
-                        // console.log('result',result,count)
-                        if(result?.status){
-                            resolve('Success')
-                            clearInterval(txInterval)
-                        }
-
-                        if(count === 6 ){
-                            resolve('Pending') 
-                            clearInterval(txInterval)
-                        }
-
-                        count++                        
-                    },10000)                    
-                })
+                let txStatus= await validateTx(sendTransaction.txid)
                 // console.log("debug7",txStatus)
                 let payload = {
                     TransactionHash: sendTransaction.txid,
@@ -318,10 +308,250 @@ async function sendTransaction(address, amount, walletId, encryptedString, walle
     }
 }
 
+const poolTransfer = async(req,res) =>{
+    try{
+        //validateInput 
+        if(!req.body.walletAddress || !req.body.currency || !req.body.quantity){
+            throw new Error('Please enter valid inputs.')
+        }
+
+        //check user is registered or not
+       let user = await models.User.findOne({
+            where:{
+                walletAddress: req.body.walletAddress    
+            }
+        })
+
+        //if not registered throw error
+        if(!user){
+                throw new Error("user is not present.")
+        }
+
+        //get wallet balance of the user
+        let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
+        let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.WBTC_Decimal)
+
+        //check if the lock amount is greater than the balance
+        if(req.body.quantity > parseFloat(walletBalance)){
+            return res.status(400).send("Low wallet balance.")
+        }
+
+        //executing and validating the tx
+        poolTxStatus = await sendTransaction(dotenv.WBTC_PoolAddress, parseFloat(req.body.quantity)+0.0002, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString, dotenv.WBTC_UserWalletPassphrase)
+
+        //adding tx to the table
+        let newTx =  await models.Transaction.create({
+            userId: user.userId,
+            txType:'poolTransfer',
+            txAmount:req.body.quantity,
+            txHash:poolTxStatus.TransactionHash,
+            fees:0.0002,
+            status: poolTxStatus.status
+           })
+
+        res.status(200).json(poolTxStatus)
+
+    }
+    catch (error) {
+        console.log(error)
+    }
+}
+
+
+const validateTx = async(txHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.WBTC_PoolAddress) =>{
+        return await new Promise((resolve,reject)=>{
+            let count =1
+            let txInterval = setInterval(async()=>{
+                let result= await web3.eth.getTransactionReceipt(txHash)     
+                
+                console.log('result',result,count)
+                if(result?.status){
+                    if(userWalletAddress){
+                        // console.log("debug67",result.from ,userWalletAddress ,result.to ,recieverAddreess)
+                        // if(result.from === userWalletAddress ){ //&& result.to === recieverAddreess
+                        //     resolve('Success')
+                        // }
+                        // else{
+                        //     resolve('Failed')
+                        // }
+                        resolve('Success')
+                    }
+                    else{
+                        resolve('Success')
+                    }
+                    clearInterval(txInterval)
+                }
+
+                if(count === 6 ){
+                    resolve('Pending') 
+                    clearInterval(txInterval)
+                }
+
+                count++                        
+            },10000)                    
+        })  
+    
+}
+
+const validateOffPortalTx = async(req,res) =>{
+    try{
+        //validateInput 
+       if(!req.body.walletAddress || !req.body.userWalletAddress || !req.body.txHash || !req.body.quantity){
+            throw new Error("Please provide valid inputs.")
+       } 
+
+       //check user is registered or not
+       let user = await models.User.findOne({
+            where:{
+                walletAddress: req.body.walletAddress    
+            }
+       })
+
+       //if not registered throw error
+       if(!user){
+            throw new Error("user is not present.")
+       }
+
+       //check if txHash is already present or not
+       let tx = await models.Transaction.findOne({
+        where:{
+            txHash: req.body.txHash
+        }
+       })
+
+       //if tx is present throw error
+       if(tx){
+           throw new Error("Transaction is already present in the system.") 
+       }
+
+        //check the status of the tx       
+       let txStatus = await validateTx(req.body.txHash,req.body.quantity,req.body.userWalletAddress)
+
+       //create a new entry of the tx
+       let newTx =  await models.Transaction.create({
+        userId: user.userId,
+        txType:'poolTransfer',
+        txAmount:req.body.quantity,
+        txHash:req.body.txHash,
+        status: txStatus
+       })
+
+       console.log("debug10",txStatus)
+
+       if(txStatus === 'Success' || txStatus === 'Pending'){
+            res.status(200).json({txStatus,txHash: newTx.txHash})
+       }
+       else{
+        res.status(400).json({txStatus})
+       }
+
+    }
+    catch (error) {
+        console.log(error)
+        res.status(500).send(error.message)
+    }
+}
+
+const confirmTx = async(req,res) =>{
+    try{
+        //validate walletAddress and txHash inputs   
+        if(!req.body.userWalletAddress || !req.body.txHash){
+            throw new Error("Valid inputs are required.")
+        }     
+
+        //check if user is present
+        let user = await models.User.findOne({
+            where:{
+                walletAddress: req.body.userWalletAddress
+            }
+        })
+
+        if(!user){
+            throw new Error("Invalid user..")
+        }
+
+        //get tx using txHash also associate user
+        let tx = await models.Transaction.findOne({
+            where:{
+                txHash: req.body.txHash
+            },
+            include:[{model: models.User}]
+        })
+        console.log("debug123",tx)
+
+        //validate tx 
+        if(!tx){
+            throw new Error("Please validate the tx.")
+        }
+
+        //validate user of the tx    
+        if(tx.User.walletAddress !== req.body.userWalletAddress){
+            throw new Error("Transaction doesn't belongs to this user.")
+        }
+
+        //validatetx.txType === 'poolTransfer' or check if contractId is valid 
+        if(tx.txType !== "poolTransfer" || tx.contractId){
+            throw new Error("Transaction is already used for another contract.")
+        }
+
+        res.status(200).send("Success.")
+
+    }
+    catch (error) {
+        console.log(error)
+        res.status(500).send(error.message)
+    }
+}
+
+const depositFees = async(req,res) =>{
+    try{
+        //check input params (userWalletAddres)
+        if(!req.body.userWalletAddress){
+            throw new Error("Valid inputs are required.")
+        }
+
+        //check if user exists
+        let user = await models.User.findOne({
+            where:{
+                walletAddress:req.body.userWalletAddress
+            }
+        })
+
+        if(!user){
+            throw new Error("User is not registered.")
+        }
+
+        let fees = 0.0002
+
+        //get balance of the user
+        let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
+        let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.WBTC_Decimal)
+
+        //check if balance of the user is less that 0.0002BTC fees
+        if(fees > parseFloat(walletBalance)){
+            return res.status(400).send("Low wallet balance.")
+        }
+
+        //transfer amount and validate the transaction
+        poolTxStatus = await sendTransaction(dotenv.WBTC_PoolAddress, fees, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString, dotenv.WBTC_UserWalletPassphrase)
+
+        res.status(200).json(poolTxStatus)
+
+    }
+    catch(error){
+        console.log(error)
+        res.status(500).send(error.message)  
+    }
+}
+
 module.exports = {
     createContract,
     pricePredictor,
     getPoolAddress,
     checkStrikePrice,
-    getWalletBalance
+    getWalletBalance,
+    poolTransfer,
+    validateOffPortalTx,
+    confirmTx,
+    depositFees
 }
