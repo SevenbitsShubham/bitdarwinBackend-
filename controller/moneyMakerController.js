@@ -160,8 +160,8 @@ const createContract = async(req,res) =>{
 
 const getWalletBalance = async(req,res) =>{
     try{
-        let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
-        let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.WBTC_Decimal)
+        let wallet = await bitgo.coin(dotenv.TBTC_Coin).wallets().get({ id: dotenv.TBTC_UserWalletId });
+        let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.TBTC_Decimal)
         res.status(200).json({walletBalance:walletBalance})
     }
     catch(error){
@@ -189,7 +189,6 @@ const pricePredictor = async(req,res) =>{
                 throw new Error(error)
             }
             if(result){
-                console.log("log1",result)
                 if(fs.existsSync(filepath)){
                     fs.unlinkSync(filepath)
                 }
@@ -206,7 +205,7 @@ const pricePredictor = async(req,res) =>{
 
 const getPoolAddress = async(req,res) =>{
     try {
-        res.status(200).json({poolAddress:process.env.WBTC_PoolAddress})
+        res.status(200).json({poolAddress:process.env.TBTC_PoolAddress})
     } catch (error) {
         
     }
@@ -237,7 +236,7 @@ async function checkStrikePrice()  {
                 let marketMakerUserAddress = await models.User.findOne({userId: contracts[i].dataValues.userId})
                 console.log(marketMakerUserAddress.dataValues.walletAddress)
                 let amountinBTC = "0.0003"
-                await sendTransaction(marketMakerUserAddress.dataValues.walletAddress, amountinBTC, dotenv.WBTC_HotWalletId, dotenv.WBTC_encryptedString, dotenv.WBTC_walletPassphrase)
+                await sendTransaction(marketMakerUserAddress.dataValues.walletAddress, amountinBTC, dotenv.TBTC_HotWalletId, dotenv.TBTC_encryptedString, dotenv.TBTC_walletPassphrase)
                 await models.MoneyMakerContract.update({
                     status:"processedWithAboveStrikePrice"
                 },{where:
@@ -270,10 +269,10 @@ async function USDConverter(token) {
 
 async function sendTransaction(address, amount, walletId, encryptedString, walletPassphrase) {
     try {   
-        console.log("====================================================== SENDING WBTC TO MARKETMAKERS =================================================")
-            let amountinDecimal = new BN(amount).times(dotenv.WBTC_Decimal).toString()
+        console.log("====================================================== SENDING TBTC TO MARKETMAKERS =================================================")
+            let amountinDecimal = new BN(amount).times(dotenv.TBTC_Decimal).toString()
             console.log(amountinDecimal)
-            let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: walletId });
+            let wallet = await bitgo.coin(dotenv.TBTC_Coin).wallets().get({ id: walletId });
             try {
 
                 let prebuild = await wallet.prebuildTransaction({
@@ -287,15 +286,17 @@ async function sendTransaction(address, amount, walletId, encryptedString, walle
 
                 let signedTX = await wallet.signTransaction({ txPrebuild: prebuild, prv: decryptedString })
                 
+                console.log("debug6",signedTX)
                 let sendTransaction = await wallet.submitTransaction({
-                    halfSigned: signedTX.halfSigned
+                    txHex: signedTX.txHex
                 })
 
-                let txStatus= await validateTx(sendTransaction.txid)
+                // let txStatus= 
+                // await validateTx(sendTransaction.txid)
                 // console.log("debug7",txStatus)
                 let payload = {
                     TransactionHash: sendTransaction.txid,
-                    status: txStatus
+                    status: txStatus?txStatus:'inProcess'
                 }
                 return payload
             } catch (error) {
@@ -328,8 +329,8 @@ const poolTransfer = async(req,res) =>{
         }
 
         //get wallet balance of the user
-        let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
-        let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.WBTC_Decimal)
+        let wallet = await bitgo.coin(dotenv.TBTC_Coin).wallets().get({ id: dotenv.TBTC_UserWalletId });
+        let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.TBTC_Decimal)
 
         //check if the lock amount is greater than the balance
         if(req.body.quantity > parseFloat(walletBalance)){
@@ -337,7 +338,9 @@ const poolTransfer = async(req,res) =>{
         }
 
         //executing and validating the tx
-        poolTxStatus = await sendTransaction(dotenv.WBTC_PoolAddress, parseFloat(req.body.quantity)+0.0002, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString, dotenv.WBTC_UserWalletPassphrase)
+        // poolTxStatus = await sendTransaction(dotenv.TBTC_PoolAddress, parseFloat(req.body.quantity)+0.0002, dotenv.TBTC_UserWalletId, dotenv.TBTC_UserEncryptedString, dotenv.TBTC_UserWalletPassphrase)
+        poolTxStatus = await sendTransaction(dotenv.TBTC_PoolAddress, parseFloat(req.body.quantity), dotenv.TBTC_UserWalletId, dotenv.TBTC_UserEncryptedString, dotenv.TBTC_UserWalletPassphrase)
+
 
         //adding tx to the table
         let newTx =  await models.Transaction.create({
@@ -358,7 +361,7 @@ const poolTransfer = async(req,res) =>{
 }
 
 
-const validateTx = async(txHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.WBTC_PoolAddress) =>{
+const validateTx = async(txHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.TBTC_PoolAddress) =>{
         return await new Promise((resolve,reject)=>{
             let count =1
             let txInterval = setInterval(async()=>{
@@ -524,8 +527,8 @@ const depositFees = async(req,res) =>{
         let fees = 0.0002
 
         //get balance of the user
-        let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
-        let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.WBTC_Decimal)
+        let wallet = await bitgo.coin(dotenv.TBTC_Coin).wallets().get({ id: dotenv.TBTC_UserWalletId });
+        let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.TBTC_Decimal)
 
         //check if balance of the user is less that 0.0002BTC fees
         if(fees > parseFloat(walletBalance)){
@@ -533,7 +536,7 @@ const depositFees = async(req,res) =>{
         }
 
         //transfer amount and validate the transaction
-        poolTxStatus = await sendTransaction(dotenv.WBTC_PoolAddress, fees, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString, dotenv.WBTC_UserWalletPassphrase)
+        poolTxStatus = await sendTransaction(dotenv.TBTC_PoolAddress, fees, dotenv.TBTC_UserWalletId, dotenv.TBTC_UserEncryptedString, dotenv.TBTC_UserWalletPassphrase)
 
         res.status(200).json(poolTxStatus)
 
