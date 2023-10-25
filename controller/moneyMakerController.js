@@ -286,17 +286,17 @@ async function sendTransaction(address, amount, walletId, encryptedString, walle
 
                 let signedTX = await wallet.signTransaction({ txPrebuild: prebuild, prv: decryptedString })
                 
-                console.log("debug6",signedTX)
                 let sendTransaction = await wallet.submitTransaction({
                     txHex: signedTX.txHex
                 })
 
-                // let txStatus= 
-                // await validateTx(sendTransaction.txid)
-                // console.log("debug7",txStatus)
+                console.log("debug6",signedTX,"wallet",wallet,"sendTx",sendTransaction)
+
+                let txStatus= await validateTx(wallet,sendTransaction)
+                console.log("debug7",txStatus)
                 let payload = {
                     TransactionHash: sendTransaction.txid,
-                    status: txStatus?txStatus:'inProcess'
+                    status: txStatus
                 }
                 return payload
             } catch (error) {
@@ -361,31 +361,39 @@ const poolTransfer = async(req,res) =>{
 }
 
 
-const validateTx = async(txHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.TBTC_PoolAddress) =>{
+const validateTx = async(walletInstance,transaction,quantity=null,userWalletAddress=null,recieverAddreess=process.env.TBTC_PoolAddress) =>{
         return await new Promise((resolve,reject)=>{
             let count =1
             let txInterval = setInterval(async()=>{
-                let result= await web3.eth.getTransactionReceipt(txHash)     
                 
-                console.log('result',result,count)
-                if(result?.status){
-                    if(userWalletAddress){
-                        // console.log("debug67",result.from ,userWalletAddress ,result.to ,recieverAddreess)
-                        // if(result.from === userWalletAddress ){ //&& result.to === recieverAddreess
-                        //     resolve('Success')
-                        // }
-                        // else{
-                        //     resolve('Failed')
-                        // }
-                        resolve('Success')
+                let transfer = await walletInstance.getTransfer({id:transaction.txid})
+                // let result= await web3.eth.getTransactionReceipt(txHash)     
+                
+                console.log('result',transfer.state,count)
+                if(transfer.state === "confirmed" || transfer.state === "failed" ){
+                    console.log("debug7",transfer)
+                    if(transfer.state === "confirmed"){
+                        if(userWalletAddress ){
+                            // console.log("debug67",result.from ,userWalletAddress ,result.to ,recieverAddreess)
+                            // if(result.from === userWalletAddress ){ //&& result.to === recieverAddreess
+                            //     resolve('Success')
+                            // }
+                            // else{
+                            //     resolve('Failed')
+                            // }
+                            resolve('Success')
+                        }
+                        else{
+                            resolve('Success')
+                        }
                     }
-                    else{
-                        resolve('Success')
+                    else if(transfer.state ==="failed"){
+                        resolve('Rejected')
                     }
                     clearInterval(txInterval)
                 }
 
-                if(count === 6 ){
+                if(count === 120 ){
                     resolve('Pending') 
                     clearInterval(txInterval)
                 }
