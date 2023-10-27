@@ -292,7 +292,7 @@ async function sendTransaction(address, amount, walletId, encryptedString, walle
 
                 console.log("debug6",signedTX,"wallet",wallet,"sendTx",sendTransaction)
 
-                let txStatus= await validateTx(wallet,sendTransaction)
+                let txStatus= await validateTx(wallet,sendTransaction.txid,amountinDecimal)
                 console.log("debug7",txStatus)
                 let payload = {
                     TransactionHash: sendTransaction.txid,
@@ -361,18 +361,20 @@ const poolTransfer = async(req,res) =>{
 }
 
 
-const validateTx = async(walletInstance,transaction,quantity=null,userWalletAddress=null,recieverAddreess=process.env.TBTC_PoolAddress) =>{
+const validateTx = async(walletInstance,transactionHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.TBTC_PoolAddress) =>{
         return await new Promise((resolve,reject)=>{
             let count =1
             let txInterval = setInterval(async()=>{
                 
-                let transfer = await walletInstance.getTransfer({id:transaction.txid})
+                let transfer = await walletInstance.getTransfer({id:transactionHash})
                 // let result= await web3.eth.getTransactionReceipt(txHash)     
                 
                 console.log('result',transfer.state,count)
                 if(transfer.state === "confirmed" || transfer.state === "failed" ){
                     console.log("debug7",transfer)
                     if(transfer.state === "confirmed"){
+                        let findAddressProof 
+                        console.log("findAddressProof",findAddressProof,quantity,transfer.baseValue)
                         if(userWalletAddress ){
                             // console.log("debug67",result.from ,userWalletAddress ,result.to ,recieverAddreess)
                             // if(result.from === userWalletAddress ){ //&& result.to === recieverAddreess
@@ -381,10 +383,27 @@ const validateTx = async(walletInstance,transaction,quantity=null,userWalletAddr
                             // else{
                             //     resolve('Failed')
                             // }
+                            // let findAddressProof = transfer.outputs.find(element=>element.address === userWalletAddress)
+                            // console.log("findAddressProof",findAddressProof,quantity,baseValue)
+                        findAddressProof = transfer.outputs.find(element=>element.wallet === userWalletAddress)
+                        }
+                        else{
+                            console.log("log51",Object.keys(transfer),transfer.output,process.env.TBTC_HotWalletId)
+                        findAddressProof = transfer.outputs.find(element=>{
+                            console.log("logger",element.wallet === process.env.TBTC_HotWalletId.toString(),element.wallet ,process.env.TBTC_HotWalletId.toString())
+                            if(element.wallet === process.env.TBTC_HotWalletId.toString()){
+                                return element 
+                            }
+                            
+                        })
+                        }
+
+                        console.log("logger2",findAddressProof,quantity === (-1*parseInt(transfer.baseValue)),quantity ,(-1*parseInt(transfer.baseValue)))
+                        if(parseInt(quantity) === (-1*parseInt(transfer.baseValue)) && findAddressProof){ 
                             resolve('Success')
                         }
                         else{
-                            resolve('Success')
+                            resolve('invalidTx')
                         }
                     }
                     else if(transfer.state ==="failed"){
@@ -435,8 +454,11 @@ const validateOffPortalTx = async(req,res) =>{
            throw new Error("Transaction is already present in the system.") 
        }
 
-        //check the status of the tx       
-       let txStatus = await validateTx(req.body.txHash,req.body.quantity,req.body.userWalletAddress)
+       let wallet = await bitgo.coin(dotenv.TBTC_Coin).wallets().get({ id: walletId });
+       let amountinDecimal = new BN(req.body.quantity).times(dotenv.TBTC_Decimal).toString()
+
+       //check the status of the tx       
+       let txStatus = await validateTx(wallet,req.body.txHash,amountinDecimal,req.body.userWalletAddress)
 
        //create a new entry of the tx
        let newTx =  await models.Transaction.create({
