@@ -1,9 +1,9 @@
 {
   "development": {
-    "username": "root",
-    "password": "password",
-    "database": "market_makers_demo",
-    "host": "127.0.0.1",
+    "username": "admin",
+    "password": "l9RF2zIDZ623EoPs",
+    "database":"market_makers_demo",
+    "host": "database-1.cs9onanesfk4.us-east-2.rds.amazonaws.com",
     "dialect": "mysql"
   },
   "test": {
