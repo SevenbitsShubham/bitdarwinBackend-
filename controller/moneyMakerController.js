@@ -174,7 +174,7 @@ const pricePredictor = async(req,res) =>{
     try{
         
         // const predictionScript = spawn('python',["../utils/prediction.py"])
-        const predictionScript = spawnSync('python3',["../backend/utils/prediction.py","prediction",'../backend/utils/BTC-USD-price.csv'])
+        const predictionScript = spawnSync('python3',["../bitdarwinBackend-/utils/prediction.py","prediction",'../bitdarwinBackend-/utils/BTC-USD-price.csv'])
         let result= predictionScript.stdout?.toString()?.trim();
         const error = predictionScript.stderr?.toString()?.trim();
 
