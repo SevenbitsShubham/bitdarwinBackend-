@@ -183,7 +183,7 @@ const pricePredictor = async(req,res) =>{
             throw new Error(error)
         }
 
-        let filepath = '../backend/plot.png'
+        let filepath = '../bitdarwinBackend-/plot.png'
         cloudinary.uploader.upload(filepath,(error,result)=>{
             if(error){
                 throw new Error(error)
