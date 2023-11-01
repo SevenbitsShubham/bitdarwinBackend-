@@ -160,9 +160,23 @@ const createContract = async(req,res) =>{
 
 const getWalletBalance = async(req,res) =>{
     try{
-        let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
-        let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.WBTC_Decimal)
-        res.status(200).json({walletBalance:walletBalance})
+        if(!req.body.walletAddress){
+            throw new Error("WalletAddress is required.")
+        }
+
+        let user = await models.User.findOne({
+            where:{
+                walletAddress: req.body.walletAddress 
+            }
+        })
+
+        if(!user){
+            user = await models.User.create({
+                walletAddress: req.body.walletAddress 
+            })
+        }
+
+        res.status(200).json({walletBalance:user.balance})
     }
     catch(error){
         console.log("error",error)
@@ -206,7 +220,7 @@ const pricePredictor = async(req,res) =>{
 
 const getPoolAddress = async(req,res) =>{
     try {
-        res.status(200).json({poolAddress:process.env.WBTC_PoolAddress})
+        res.status(200).json({poolAddress:process.env.WBTC_UserPoolAddress})
     } catch (error) {
         
     }
@@ -291,8 +305,10 @@ async function sendTransaction(address, amount, walletId, encryptedString, walle
                     halfSigned: signedTX.halfSigned
                 })
 
-                let txStatus= await validateTx(sendTransaction.txid)
+                let txStatus= await validateTx(sendTransaction.txid,amount,walletId,process.env.WBTC_PoolAddress)
                 // console.log("debug7",txStatus)
+                
+
                 let payload = {
                     TransactionHash: sendTransaction.txid,
                     status: txStatus
@@ -329,15 +345,23 @@ const poolTransfer = async(req,res) =>{
 
         //get wallet balance of the user
         let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
-        let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.WBTC_Decimal)
 
         //check if the lock amount is greater than the balance
-        if(req.body.quantity > parseFloat(walletBalance)){
+        if(req.body.quantity > parseFloat(user.balance)){
             return res.status(400).send("Low wallet balance.")
         }
 
         //executing and validating the tx
         poolTxStatus = await sendTransaction(dotenv.WBTC_PoolAddress, parseFloat(req.body.quantity)+0.0002, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString, dotenv.WBTC_UserWalletPassphrase)
+
+        if(poolTxStatus.status === "Success"){
+            let newBalance = (new BN(user.balance)).minus(new BN(req.body.quantity)).toPrecision(8)
+            await models.User.update({balance : newBalance},{
+                where:{
+                    walletAddress: req.body.walletAddress
+                }
+            })
+        }
 
         //adding tx to the table
         let newTx =  await models.Transaction.create({
@@ -348,6 +372,8 @@ const poolTransfer = async(req,res) =>{
             fees:0.0002,
             status: poolTxStatus.status
            })
+        
+           
 
         res.status(200).json(poolTxStatus)
 
@@ -358,17 +384,19 @@ const poolTransfer = async(req,res) =>{
 }
 
 
-const validateTx = async(txHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.WBTC_PoolAddress) =>{
+const validateTx = async(txHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.WBTC_UserPoolAddress) =>{
         return await new Promise((resolve,reject)=>{
             let count =1
             let txInterval = setInterval(async()=>{
                 let result= await web3.eth.getTransactionReceipt(txHash)     
                 
-                console.log('result',result,count)
                 if(result?.status){
+                console.log('result',result,count,result.from.toString(), userWalletAddress.toString(),result.to,recieverAddreess )
                     if(userWalletAddress){
                         // console.log("debug67",result.from ,userWalletAddress ,result.to ,recieverAddreess)
-                        // if(result.from === userWalletAddress ){ //&& result.to === recieverAddreess
+                        //for contract creation from : 0xf58e7f435c2df7d671bc8dd610f36eade19a3c96 to:0x7de01d5f2bef56bdfb9971a270ecd13cac287799
+                        //for balance from: to:0xd4bccebe77b7c1da89818f8889e3ea09046e7e38 
+                        // if(result.to === '0xd4bccebe77b7c1da89818f8889e3ea09046e7e38'){ //&& result.to === recieverAddreess
                         //     resolve('Success')
                         // }
                         // else{
@@ -426,6 +454,16 @@ const validateOffPortalTx = async(req,res) =>{
 
         //check the status of the tx       
        let txStatus = await validateTx(req.body.txHash,req.body.quantity,req.body.userWalletAddress)
+
+       if(txStatus === "Success"){
+        let newBalance = (new BN(user.balance)).plus(new BN(req.body.quantity)).toPrecision(8)
+        console.log("log62",newBalance,user.balance,req.body.quantity)
+        await models.User.update({balance : newBalance},{
+            where:{
+                walletAddress: req.body.walletAddress
+            }
+        })
+       }
 
        //create a new entry of the tx
        let newTx =  await models.Transaction.create({
