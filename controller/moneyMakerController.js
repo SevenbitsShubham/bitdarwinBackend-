@@ -20,7 +20,6 @@ cloudinary.config({
     api_key: process.env.API_KEY,
     api_secret: process.env.API_SECRET,
   });
-  let bitgoContractCount = 0
 
 let web3 = new Web3(`https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`)  
 
@@ -54,8 +53,12 @@ const createContract = async(req,res) =>{
                 newContractAddress = await icpMethods.createIcpContract(req.body)
                } 
                else{
-                newContractAddress =  `0xb${bitgoContractCount}f5ea0ba39494ce839613fffba7427****${bitgoContractCount*100}`
-                ++bitgoContractCount
+                let lastContract = await models.MoneyMakerContract.findAll({
+                    limit:1,
+                    order:[['createdAt', 'DESC']]
+                })
+                let newContractId = lastContract? +lastContract[0].id+1:1
+                newContractAddress =  `0xt${newContractId}xxxxxxxx${newContractId*10}`
                }
 
 
@@ -171,9 +174,7 @@ const getWalletBalance = async(req,res) =>{
         })
 
         if(!user){
-            user = await models.User.create({
-                walletAddress: req.body.walletAddress 
-            })
+            throw new Error("user is not registered.")
         }
 
         res.status(200).json({walletBalance:user.balance})

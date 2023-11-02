@@ -1,17 +1,33 @@
 const express = require('express')
+const {Op} = require('sequelize')
 const models = require('../models/index.js')
 
 
 const getContractList = async(req,res) =>{
     try{
-        if(!req.body.contractType){
+        if(!req.body.contractType || !req.body.walletAddress){
             throw new Error("Invalid input parameters.")
         }
 
+        let user = await models.User.findOne({
+            where:{
+                walletAddress: req.body.walletAddress
+            }
+        })
+
+        if(!user){
+            throw new Error("User is not registered.")
+        }
          let contractLists =  await models.MoneyMakerContract.findAll({
             where:{
                 buyAvailable:true,
                 status:["inprocess","inprocess-resell"],
+                createrId: {
+                    [Op.ne]:user.userId
+                },
+                ownerId: {
+                    [Op.ne]:user.userId
+                },
                 contractType:req.body.contractType
             },
             attributes:['id','strikePrice','premium','openInterest','expirationDate','contractAddress','quantity','currency','title','buyer','seller','governingLaw','propertyAddress','sellingPrice','terms','contractType']
@@ -51,15 +67,20 @@ const buyContract  = async(req,res) =>{
             throw new Error("Contract is not present.")
         }
 
-        // if(contract.deployment === 'ICP'){
+        // if(contract.ownerId === user.id){
+        //     throw new Error("Contract is already owned by user.User can't buy contract.")
+        // }
 
+        // if(contract.createrId === user.id){
+        //     throw new Error("User is the creater of the contract.User can't buy contract.")
         // }
 
         //if contract present then update contract
         let updateContractData = {
             ownerId: user.userId,
             txId:transaction.txId,
-            buyAvailable:false
+            buyAvailable:false,
+            status: 'inprocess'
         }
         await models.MoneyMakerContract.update(updateContractData,{
             where:{
@@ -87,7 +108,7 @@ const checkUserRegistration = async(req,res)=>{
                 walletAddress: req.body.walletAddress 
             }
         })
-
+        
         if(!user){
             await models.User.create({
                 walletAddress: req.body.walletAddress 
@@ -107,7 +128,7 @@ const checkUserRegistration = async(req,res)=>{
 
 const getBuyerContracts = async(req,res) =>{
     try{
-        if(!req.body.contractType || !req.body.contractstatus || !req.body.walletAddress){
+        if( !req.body.contractstatus || !req.body.walletAddress){
             throw new Error("Enter valid inputs.")
         }
 
@@ -129,8 +150,18 @@ const getBuyerContracts = async(req,res) =>{
                 contractList= await models.MoneyMakerContract.findAll({
                     where:{
                         ownerId:user.userId,
-                        contractType:req.body.contractType
-                    }
+                        // contractType:req.body.contractType
+                    },
+                    include:[{
+                        model: models.User,
+                        as: 'OwnerId',
+                        attributes:['walletAddress']
+                    },{
+                        
+                        model: models.User,
+                        as: 'CreaterId',
+                        attributes:['walletAddress']
+                    }]
                 })
             }
             else{
@@ -149,7 +180,7 @@ const getBuyerContracts = async(req,res) =>{
             }
         // }
         
-        res.status(200).json({contractType:req.body.contractType,contractList})
+        res.status(200).json({contractStatus:req.body.contractstatus,contractList})
     }
     catch(error){
         console.log("error",error)
