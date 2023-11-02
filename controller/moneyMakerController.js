@@ -125,8 +125,8 @@ const createContract = async(req,res) =>{
                     contractAddress:null,
                     buyAvailable:true,
                     contractType:req.body.contractType,
-                    contractAddress:"0xb794f5ea0ba39494ce839613fffba7427****268",
-                    contract:newContractAddress
+                    contractAddress:newContractAddress,
+                    contract:req.body.contract
                 } 
             }
             
