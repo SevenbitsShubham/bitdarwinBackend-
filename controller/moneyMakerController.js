@@ -47,19 +47,29 @@ const createContract = async(req,res) =>{
             let poolTxStatus
             let contractData
             
+            let newContractAddress
+            let lastContract = await models.MoneyMakerContract.findAll({
+                limit:1,
+                order:[['createdAt', 'DESC']]
+            })
+            let newContractId = lastContract? +lastContract[0].id+1:1
+            newContractAddress =  `0xt${newContractId}xxxxxxxx${newContractId*10}`
+
             if(req.body.contractType === 'MoneyMaker'){
-                let newContractAddress
+                
                if(req.body.deployment === 'ICP'){
                 newContractAddress = await icpMethods.createIcpContract(req.body)
                } 
-               else{
-                let lastContract = await models.MoneyMakerContract.findAll({
-                    limit:1,
-                    order:[['createdAt', 'DESC']]
-                })
-                let newContractId = lastContract? +lastContract[0].id+1:1
-                newContractAddress =  `0xt${newContractId}xxxxxxxx${newContractId*10}`
-               }
+
+            /*****need to change below flow */   
+            //    else{
+            //     let lastContract = await models.MoneyMakerContract.findAll({
+            //         limit:1,
+            //         order:[['createdAt', 'DESC']]
+            //     })
+            //     let newContractId = lastContract? +lastContract[0].id+1:1
+            //     newContractAddress =  `0xt${newContractId}xxxxxxxx${newContractId*10}`
+            //    }
 
 
                if(!req.body.txHash){
@@ -116,7 +126,7 @@ const createContract = async(req,res) =>{
                     buyAvailable:true,
                     contractType:req.body.contractType,
                     contractAddress:"0xb794f5ea0ba39494ce839613fffba7427****268",
-                    contract:req.body.contract
+                    contract:newContractAddress
                 } 
             }
             
