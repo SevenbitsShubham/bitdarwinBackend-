@@ -83,7 +83,7 @@ const createContract = async(req,res) =>{
                     ownerId: user.userId,
                     createrId: user.userId,
                     strikePrice:req.body.strikePrice,
-                    premium:req.body.premium,
+                    premium:0.005,//req.body.premium
                     openInterest:req.body.openInterest,
                     expirationDate:req.body.expirationDate,
                     quantity:req.body.quantity,
