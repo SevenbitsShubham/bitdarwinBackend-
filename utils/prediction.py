@@ -10,7 +10,9 @@ def prediction():
     # Load the historical Bitcoin price data into a Pandas dataframe
     df = pd.read_csv(sys.argv[2], header=None, names=["Date", "Price"])
 
-    print("pyLog2")
+    monthMultiplier = int(sys.argv[3])*30
+    print(monthMultiplier)
+
     # Remove rows where 'Date' column equals to "Date" (the column name itself)
     df = df[df['Date'] != "Date"]
 
@@ -29,14 +31,13 @@ def prediction():
     # Fit an ARIMA model to the training data
     model = ARIMA(train["Price"], order=(1,1,1))
     model = model.fit()
-    
-    print("pyLog4")
-    # Make predictions for the next 30 days
-    predictions = model.forecast(steps=30).values
+
+    # Make predictions for the next 30*months days
+    predictions = model.forecast(steps=monthMultiplier).values
 
     # Use Monte Carlo simulation to generate 1000 scenarios for the next 30 days
     num_simulations = 1000
-    num_steps = 30
+    num_steps = monthMultiplier
     simulated_prices = np.zeros((num_simulations, num_steps))
     for i in range(num_simulations):
         simulated_prices[i,:] = predictions + np.random.normal(0, model.resid.std(), num_steps)
