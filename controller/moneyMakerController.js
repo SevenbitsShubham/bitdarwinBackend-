@@ -26,7 +26,7 @@ let web3 = new Web3(`https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`)
 const createContract = async(req,res) =>{
         try{
             //initial parameter validation
-            if(!req.body.walletAddress || !req.body.expirationDate || !req.body.query || !req.body.hex || !req.body.signature || !req.body.contractType ){
+            if(!req.body.walletAddress || !req.body.expirationDate || !req.body.query || !req.body.hex || !req.body.signature || !req.body.contractType  ){
                  throw new Error("Valid parameters are required.")   
             }
 
@@ -48,29 +48,21 @@ const createContract = async(req,res) =>{
             let contractData
             
             let newContractAddress
-            let lastContract = await models.MoneyMakerContract.findAll({
-                limit:1,
-                order:[['createdAt', 'DESC']]
-            })
-            let newContractId = lastContract? +lastContract[0].id+1:1
-            newContractAddress =  `0xt${newContractId}xxxxxxxx${newContractId*10}`
-
+            //create a contract address if the deployment is with bitgo
+            if(req.body.deployment !== 'ICP'){
+                let lastContract = await models.MoneyMakerContract.findAll({
+                    limit:1,
+                    order:[['createdAt', 'DESC']]
+                })
+                let newContractId = lastContract? +lastContract[0].id+1:1
+                newContractAddress =  `0xt${newContractId}xxxxxxxx${newContractId*10}`
+            }
+                
             if(req.body.contractType === 'MoneyMaker'){
                 
                if(req.body.deployment === 'ICP'){
                 newContractAddress = await icpMethods.createIcpContract(req.body)
                } 
-
-            /*****need to change below flow */   
-            //    else{
-            //     let lastContract = await models.MoneyMakerContract.findAll({
-            //         limit:1,
-            //         order:[['createdAt', 'DESC']]
-            //     })
-            //     let newContractId = lastContract? +lastContract[0].id+1:1
-            //     newContractAddress =  `0xt${newContractId}xxxxxxxx${newContractId*10}`
-            //    }
-
 
                if(!req.body.txHash){
                     throw new Error("TxHash is required.")
@@ -85,8 +77,6 @@ const createContract = async(req,res) =>{
                if(reqTx.contractId){
                    throw new Error("Deposit transaction for the contract is already used, invalid deposit transaction.") 
                }
-
-               
             
             //add contract details
                  contractData = {
@@ -103,7 +93,9 @@ const createContract = async(req,res) =>{
                     contractAddress:null,
                     buyAvailable:true,
                     contractType:req.body.contractType,
-                    contractAddress:newContractAddress //
+                    contractAddress:newContractAddress,
+                    icpAuthSignature:req.body.icpAuthSignature,
+                    icpAuthString:req.body.icpAuthString
                 }                
                 
             }
@@ -126,7 +118,9 @@ const createContract = async(req,res) =>{
                     buyAvailable:true,
                     contractType:req.body.contractType,
                     contractAddress:newContractAddress,
-                    contract:req.body.contract
+                    contract:req.body.contract,
+                    icpAuthSignature:req.body.icpAuthSignature,
+                    icpAuthString:req.body.icpAuthString
                 } 
             }
             

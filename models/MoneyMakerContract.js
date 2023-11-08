@@ -86,6 +86,12 @@ module.exports = (sequelize,DataTypes) =>{
             type: DataTypes.BOOLEAN,  
             defaultValue:true
         },
+        icpAuthSignature:{
+            type: DataTypes.STRING,
+        },
+        icpAuthString:{
+            type: DataTypes.STRING,
+        },
         contract:{
             type: DataTypes.TEXT
         }
