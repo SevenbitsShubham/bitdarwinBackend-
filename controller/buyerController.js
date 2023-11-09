@@ -1,17 +1,34 @@
 const express = require('express')
+const {Op} = require('sequelize')
 const models = require('../models/index.js')
+const icpMethods = require('../helper/icpMethods.js')
 
 
 const getContractList = async(req,res) =>{
     try{
-        if(!req.body.contractType){
+        if(!req.body.contractType || !req.body.walletAddress){
             throw new Error("Invalid input parameters.")
         }
 
+        let user = await models.User.findOne({
+            where:{
+                walletAddress: req.body.walletAddress
+            }
+        })
+
+        if(!user){
+            throw new Error("User is not registered.")
+        }
          let contractLists =  await models.MoneyMakerContract.findAll({
             where:{
                 buyAvailable:true,
                 status:["inprocess","inprocess-resell"],
+                createrId: {
+                    [Op.ne]:user.userId
+                },
+                ownerId: {
+                    [Op.ne]:user.userId
+                },
                 contractType:req.body.contractType
             },
             attributes:['id','strikePrice','premium','openInterest','expirationDate','contractAddress','quantity','currency','title','buyer','seller','governingLaw','propertyAddress','sellingPrice','terms','contractType']
@@ -24,9 +41,11 @@ const getContractList = async(req,res) =>{
     }
 }
 
+//add transaction to this function 
+//validate transaction given by user
 const buyContract  = async(req,res) =>{
     try{
-        if(!req.body.contractId || !req.body.txAmount || !req.body.userWalletAddress){
+        if(!req.body.contractId || !req.body.txHash || !req.body.userWalletAddress){
              throw new Error("Provide valid inputs.")   
         }
 
@@ -44,22 +63,37 @@ const buyContract  = async(req,res) =>{
 
         //check if contract is present
         let contract = await models.MoneyMakerContract.findOne({
-            where:{id:req.body.contractId}})        
-            console.log("log3")    
+            where:{id:req.body.contractId},
+            include:[{
+                model: models.User,
+                as: 'OwnerId',
+                attributes:['walletAddress']
+            }]
+        })        
+
         //if contract not present give error
         if(!contract){
             throw new Error("Contract is not present.")
         }
 
-        // if(contract.deployment === 'ICP'){
+        if(contract.ownerId === user.userId){
+            throw new Error("Contract is already owned by user.User can't buy contract.")
+        }
 
-        // }
+        if(contract.createrId === user.userId){
+            throw new Error("User is the creater of the contract.User can't buy contract.")
+        }
+
+        if(contract.deployment === 'ICP'){
+            newContractAddress = await icpMethods.buyIcpContract(contract.contractAddress,user.walletAddress)
+           } 
 
         //if contract present then update contract
         let updateContractData = {
             ownerId: user.userId,
             txId:transaction.txId,
-            buyAvailable:false
+            buyAvailable:false,
+            status: 'inprocess'
         }
         await models.MoneyMakerContract.update(updateContractData,{
             where:{
@@ -87,7 +121,7 @@ const checkUserRegistration = async(req,res)=>{
                 walletAddress: req.body.walletAddress 
             }
         })
-
+        
         if(!user){
             await models.User.create({
                 walletAddress: req.body.walletAddress 
@@ -107,7 +141,7 @@ const checkUserRegistration = async(req,res)=>{
 
 const getBuyerContracts = async(req,res) =>{
     try{
-        if(!req.body.contractType || !req.body.contractstatus || !req.body.walletAddress){
+        if( !req.body.contractstatus || !req.body.walletAddress){
             throw new Error("Enter valid inputs.")
         }
 
@@ -129,8 +163,18 @@ const getBuyerContracts = async(req,res) =>{
                 contractList= await models.MoneyMakerContract.findAll({
                     where:{
                         ownerId:user.userId,
-                        contractType:req.body.contractType
-                    }
+                        // contractType:req.body.contractType
+                    },
+                    include:[{
+                        model: models.User,
+                        as: 'OwnerId',
+                        attributes:['walletAddress']
+                    },{
+                        
+                        model: models.User,
+                        as: 'CreaterId',
+                        attributes:['walletAddress']
+                    }]
                 })
             }
             else{
@@ -149,7 +193,7 @@ const getBuyerContracts = async(req,res) =>{
             }
         // }
         
-        res.status(200).json({contractType:req.body.contractType,contractList})
+        res.status(200).json({contractStatus:req.body.contractstatus,contractList})
     }
     catch(error){
         console.log("error",error)
@@ -188,8 +232,13 @@ const contractResell = async(req,res) =>{
 
        //check whether user is owner of the contract
        if(req.body.walletAddress !== contract.OwnerId.walletAddress){
-           throw new Error("Invalid ownership.") 
+           throw new Error("Unable to resell. As user is not the owner of the contract.") 
        }
+
+       //check whether user is owner of the contract
+       if(req.body.walletAddress === contract.CreaterId.walletAddress){
+        throw new Error("Unable to resell.As user is the creator of the contract.") 
+    }
 
        //check if contract is not expired
        if(contract.status !== 'inprocess'){

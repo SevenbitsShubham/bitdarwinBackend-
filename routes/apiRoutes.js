@@ -11,8 +11,8 @@ router.post('/user/checkRegistration',buyerController.checkUserRegistration)
 
 //moneymaker routes
 router.post('/moneyMaker/createContract',moneyMakerController.createContract)
-router.get('/prediction/btcPrice',moneyMakerController.pricePredictor)
-router.get('/moneyMaker/getPoolAddress',moneyMakerController.getPoolAddress)
+router.post('/prediction/btcPrice',moneyMakerController.pricePredictor)
+router.get('/moneyMaker/getUserPoolAddress',moneyMakerController.getPoolAddress)
 router.post('/moneyMaker/walletBalance',moneyMakerController.getWalletBalance)
 router.post('/moneyMaker/lockAssets',moneyMakerController.poolTransfer)
 router.post('/moneyMaker/validateOffPortalLockTx',moneyMakerController.validateOffPortalTx)

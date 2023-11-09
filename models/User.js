@@ -13,7 +13,8 @@ module.exports = (sequelize,DataTypes) =>{
             // allowNull:false
         },
         balance:{
-            type:DataTypes.FLOAT
+            type:DataTypes.FLOAT,
+            defaultValue: 0
         }
     })
 

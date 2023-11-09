@@ -20,7 +20,7 @@ from statsmodels.tsa.arima.model import ARIMA
 from dateutil.parser import parse
 
 # Load the historical Bitcoin price data into a Pandas dataframe
-df = pd.read_csv("./BTC-USD-price.csv", header=None, names=["Date", "Price"])
+df = pd.read_csv("./BTC-USD-current-price.csv", header=None, names=["Date", "Price"])
 
 # Remove rows where 'Date' column equals to "Date" (the column name itself)
 df = df[df['Date'] != "Date"]
@@ -41,11 +41,11 @@ model = ARIMA(train["Price"], order=(1,1,1))
 model = model.fit()
 
 # Make predictions for the next 30 days
-predictions = model.forecast(steps=30).values
+predictions = model.forecast(steps=120).values
 
 # Use Monte Carlo simulation to generate 1000 scenarios for the next 30 days
 num_simulations = 1000
-num_steps = 30
+num_steps = 120
 simulated_prices = np.zeros((num_simulations, num_steps))
 for i in range(num_simulations):
     simulated_prices[i,:] = predictions + np.random.normal(0, model.resid.std(), num_steps)

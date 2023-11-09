@@ -7,7 +7,6 @@ module.exports = (sequelize,DataTypes) =>{
             type: DataTypes.INTEGER,
             primaryKey:true,
             autoIncrement:true
-
         },
         ownerId:{
             type:DataTypes.INTEGER,
@@ -86,6 +85,12 @@ module.exports = (sequelize,DataTypes) =>{
         buyAvailable:{
             type: DataTypes.BOOLEAN,  
             defaultValue:true
+        },
+        icpAuthSignature:{
+            type: DataTypes.STRING,
+        },
+        icpAuthString:{
+            type: DataTypes.STRING,
         },
         contract:{
             type: DataTypes.TEXT

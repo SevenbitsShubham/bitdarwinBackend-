@@ -5,9 +5,13 @@ import matplotlib.pyplot as plt
 from statsmodels.tsa.arima.model import ARIMA
 from dateutil.parser import parse
 
+print("pyLog1")
 def prediction():
     # Load the historical Bitcoin price data into a Pandas dataframe
     df = pd.read_csv(sys.argv[2], header=None, names=["Date", "Price"])
+
+    monthMultiplier = int(sys.argv[3])*30
+    print(monthMultiplier)
 
     # Remove rows where 'Date' column equals to "Date" (the column name itself)
     df = df[df['Date'] != "Date"]
@@ -16,6 +20,7 @@ def prediction():
     df = df.set_index("Date")
     df["Price"] = df["Price"].astype(float)
 
+    print("pyLog3")
     # Set the frequency of the dataframe to daily
     df = df.asfreq('D')
 
@@ -27,17 +32,18 @@ def prediction():
     model = ARIMA(train["Price"], order=(1,1,1))
     model = model.fit()
 
-    # Make predictions for the next 30 days
-    predictions = model.forecast(steps=30).values
+    # Make predictions for the next 30*months days
+    predictions = model.forecast(steps=monthMultiplier).values
 
     # Use Monte Carlo simulation to generate 1000 scenarios for the next 30 days
     num_simulations = 1000
-    num_steps = 30
+    num_steps = monthMultiplier
     simulated_prices = np.zeros((num_simulations, num_steps))
     for i in range(num_simulations):
         simulated_prices[i,:] = predictions + np.random.normal(0, model.resid.std(), num_steps)
     # result ={"simulated_prices":simulated_prices,"predictions":predictions}
     
+    print("pyLog5")
     # Plot the results of the Monte Carlo simulation
     plt.figure(figsize=(10,5))
     plt.plot(simulated_prices.T, color='gray', alpha=0.1)  # Use alpha for better visualization
