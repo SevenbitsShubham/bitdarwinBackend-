@@ -209,7 +209,7 @@ const pricePredictor = async(req,res) =>{
         }
         
         // const predictionScript = spawn('python',["../utils/prediction.py"])
-        const predictionScript = spawnSync('python3',["../backend/utils/prediction.py","prediction",'../backend/utils/BTC-USD-current-price.csv',req.body.months])
+        const predictionScript = spawnSync('python3',["../bitdarwinBackend-/utils/prediction.py","prediction",'../backend/utils/BTC-USD-current-price.csv',req.body.months])
         let result= predictionScript.stdout?.toString()?.trim();
         const error = predictionScript.stderr?.toString()?.trim();
 
@@ -218,7 +218,7 @@ const pricePredictor = async(req,res) =>{
             throw new Error(error)
         }
 
-        let filepath = '../backend/plot.png'
+        let filepath = '../bitdarwinBackend-/plot.png'
         cloudinary.uploader.upload(filepath,(error,result)=>{
             if(error){
                 throw new Error(error)
