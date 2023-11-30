@@ -14,10 +14,10 @@ app.use(express.urlencoded({extended:true}))
 app.use(express.json())
 app.use('/api',apiRouter)
 
-// cron.schedule("*/15 * * * * *", moneyMakerController.checkStrikePrice)
+cron.schedule("*/60 * * * * *", moneyMakerController.checkStrikePrice)
 
 
-db.sequelize.sync({alter:true}).then(()=>{
+db.sequelize.sync().then(()=>{
     // db.sequelize.sync().then(()=>{
     app.listen(port,()=>console.log(`Server is listening on port ${port}.`))
 })

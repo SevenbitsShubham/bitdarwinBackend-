@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "abi-decoder": "^2.4.0",
     "bignumber.js": "^9.1.2",
     "bitgo": "^19.17.0",
     "cloudinary": "^1.40.0",

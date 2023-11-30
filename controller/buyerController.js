@@ -2,6 +2,9 @@ const express = require('express')
 const {Op} = require('sequelize')
 const models = require('../models/index.js')
 const icpMethods = require('../helper/icpMethods.js')
+const dotenv = require("dotenv").config().parsed;
+const BN = require("bignumber.js")
+const {validateDepositTx,sendTransaction,validateTx} = require('../helper/txValidationHelper.js')
 
 
 const getContractList = async(req,res) =>{
@@ -31,7 +34,7 @@ const getContractList = async(req,res) =>{
                 },
                 contractType:req.body.contractType
             },
-            attributes:['id','strikePrice','premium','openInterest','expirationDate','contractAddress','quantity','currency','title','buyer','seller','governingLaw','propertyAddress','sellingPrice','terms','contractType']
+            attributes:['id','strikePrice','premium','openInterest','expirationDate','contractAddress','quantity','currency','title','buyer','seller','governingLaw','propertyAddress','sellingPrice','terms','contractType','deployment']
          })
          res.status(200).json({contractLists})   
     }
@@ -45,31 +48,57 @@ const getContractList = async(req,res) =>{
 //validate transaction given by user
 const buyContract  = async(req,res) =>{
     try{
-        if(!req.body.contractId || !req.body.txHash || !req.body.userWalletAddress){
+        await models.sequelize.transaction(async (transaction) =>{
+        if(!req.body.contractAddress || !req.body.txHash || !req.body.userWalletAddress){
              throw new Error("Provide valid inputs.")   
         }
 
         //check if user is prtesent
         let user =await models.User.findOne({
-            where:{walletAddress:req.body.userWalletAddress}})
+            where:{walletAddress:req.body.userWalletAddress}},{transaction})
 
         //if not create new user entry
         if(!user){
             user = await models.User.create({walletAddress:req.body.userWalletAddress})
         }
 
-        //create a new transaction
-        let transaction =  await models.Transaction.create({userId:user.userId,txType:'buy',txAmount:req.body.txAmount})
-
         //check if contract is present
         let contract = await models.MoneyMakerContract.findOne({
-            where:{id:req.body.contractId},
+            where:{contractAddress:req.body.contractAddress},
             include:[{
                 model: models.User,
                 as: 'OwnerId',
                 attributes:['walletAddress']
             }]
-        })        
+        },{transaction})
+
+        //validate input parameters for icp 
+        if(contract.deployment === 'ICP'){
+            if(!req.body.icpLoginHash ){
+                throw new Error("Icp Login Hash is required.")
+            }
+
+            if(!req.body.signForIcpAuth){
+                throw new Error("Icp auth signature is required.")
+            }
+        }
+
+        //added tx validation
+        let txStatus =  await validateDepositTx(req.body.txHash)
+
+        if(txStatus.status !== 'Success'){
+            throw new Error(`Transaction is ${txStatus}.`)
+        }
+
+        let sentQuantity = (new BN(txStatus.amount).dividedBy(new BN(process.env.USDC_Decimals))).toNumber().toPrecision(2)
+        let reqPremium = parseFloat(contract.premium)
+        // console.log("quantValidation",sentQuantity,reqPremium)
+        if(reqPremium !== parseFloat(sentQuantity)){
+            throw new Error(`Inavlid transaction amount.`)
+        }
+
+        //create a new transaction
+        let newTx =  await models.Transaction.create({userId:user.userId,txType:'buy',txAmount:req.body.txAmount})
 
         //if contract not present give error
         if(!contract){
@@ -77,7 +106,7 @@ const buyContract  = async(req,res) =>{
         }
 
         if(contract.ownerId === user.userId){
-            throw new Error("Contract is already owned by user.User can't buy contract.")
+            throw new Error("Contract is already owned by buyer can't buy contract.")
         }
 
         if(contract.createrId === user.userId){
@@ -85,24 +114,37 @@ const buyContract  = async(req,res) =>{
         }
 
         if(contract.deployment === 'ICP'){
-            newContractAddress = await icpMethods.buyIcpContract(contract.contractAddress,user.walletAddress)
+            await icpMethods.buyIcpContract(contract.contractAddress,contract.OwnerId.walletAddress,user.walletAddress,req.body)
            } 
 
         //if contract present then update contract
-        let updateContractData = {
-            ownerId: user.userId,
-            txId:transaction.txId,
-            buyAvailable:false,
-            status: 'inprocess'
+        let updateContractData 
+        if(contract.deployment === 'ICP'){   
+            updateContractData = {
+                ownerId: user.userId,
+                txId:newTx.txId,
+                buyAvailable:false,
+                icpAuthSignature:req.body.signForIcpAuth,
+                icpAuthString:req.body.icpLoginHash,
+                status: 'inprocess'
+            }
         }
+        else{    
+            updateContractData= {
+                ownerId: user.userId,
+                txId:newTx.txId,
+                buyAvailable:false,
+                status: 'inprocess'
+            }
+        }    
         await models.MoneyMakerContract.update(updateContractData,{
             where:{
-            id:req.body.contractId
+                contractAddress:req.body.contractAddress
             }
-        })
+        },{transaction})
 
         res.status(200).send("success")
-
+      })
     }
     catch(error){
         console.log("error",error)
@@ -160,40 +202,37 @@ const getBuyerContracts = async(req,res) =>{
         //get contract list 
         // if(req.body.contractType === 'MoneyMaker'){
             if(req.body.contractstatus === 'all'){
-                contractList= await models.MoneyMakerContract.findAll({
-                    where:{
-                        ownerId:user.userId,
-                        // contractType:req.body.contractType
-                    },
-                    include:[{
-                        model: models.User,
-                        as: 'OwnerId',
-                        attributes:['walletAddress']
-                    },{
-                        
-                        model: models.User,
-                        as: 'CreaterId',
-                        attributes:['walletAddress']
-                    }]
-                })
+                req.body.contractstatus = ['inprocess','inprocess-resell','processedWithAboveStrikePrice','processingWithAboveStrikePrice','processedWithBelowStrikePrice']
             }
             else{
                 if(req.body.contractstatus==='inactive'){
-                    req.body.contractstatus = ['processedWithAboveStrikePrice','processedWithBelowStrikePrice']
+                    req.body.contractstatus = ['processedWithAboveStrikePrice','processingWithAboveStrikePrice','processedWithBelowStrikePrice']
                 }
-                
-
-                contractList= await models.MoneyMakerContract.findAll({
-                    where:{
-                        ownerId:user.userId,
-                        contractType:req.body.contractType,
-                        status: req.body.contractstatus
-                    }
-                })
+                else{
+                    req.body.contractstatus = ['inprocess','inprocess-resell']
+                }
             }
+
+            contractList= await models.MoneyMakerContract.findAll({
+                where:{
+                    ownerId:user.userId,
+                    status: req.body.contractstatus
+                    // contractType:req.body.contractType
+                },
+                include:[{
+                    model: models.User,
+                    as: 'OwnerId',
+                    attributes:['walletAddress']
+                },{
+                    
+                    model: models.User,
+                    as: 'CreaterId',
+                    attributes:['walletAddress']
+                }]
+            })
         // }
         
-        res.status(200).json({contractStatus:req.body.contractstatus,contractList})
+        res.status(200).json({contractStatus:req.body.contractstatus,contractList} )
     }
     catch(error){
         console.log("error",error)
@@ -263,10 +302,165 @@ const contractResell = async(req,res) =>{
     }
 }
 
+const buyLockedBTC = async(req,res) =>{
+    try{
+        await models.sequelize.transaction(async (transaction) =>{
+        
+            //input validation
+            if(!req.body.contractAddress || !req.body.txHash || !req.body.userAddress){
+                throw new Error("Valid inputs are required.")
+            }
+
+            let tx = await models.Transaction.findOne({
+                where:{
+                    txHash: req.body.txHash
+                }
+            },{transaction})
+
+            if(tx){
+                throw new Error("Transaction is already present in the system.")
+            }
+
+            //check if contract exists
+            let callOptionContract = await models.MoneyMakerContract.findOne({
+                where:{
+                    contractAddress: req.body.contractAddress
+                },
+                include:[{
+                    model: models.User,
+                    as: 'OwnerId',
+                    attributes:['walletAddress','balance']
+                }]
+            },{transaction})
+
+            if(!callOptionContract){
+                throw new Error("Contract doesn't exist.")
+            }
+
+            //check if contract is call option or not
+            if(callOptionContract.contractType !== "MoneyMaker"){
+                throw new Error("Invalid operation on the contract,contract must be call option contract.")
+            }
+
+            //check if contract has valid status
+            if(callOptionContract.status !== 'processingWithAboveStrikePrice'){
+                throw new Error('Invalid contract status.')
+            }
+
+            console.log("buyBTCLog",callOptionContract)
+            //check if user exists
+            let user = await models.User.findOne({
+                where:{
+                    walletAddress: req.body.userAddress
+                }
+            },{transaction})
+
+            //check if user ownership exists 
+            if(callOptionContract.OwnerId.walletAddress !== req.body.userAddress){
+                throw new Error('User is not the owner of the contract.')
+            }
+            
+            //validate tx
+            let txStatus =  await validateDepositTx(req.body.txHash)
+
+            if(txStatus.status !== 'Success'){
+                throw new Error(`Transaction is ${txStatus}.`)
+            }
+
+            //check transaction amount and validate--pending
+            let sentQuantity = (new BN(txStatus.amount).dividedBy(new BN(process.env.USDC_Decimals))).toNumber().toPrecision(2)
+            let reqUsdcQuuantity = (new BN(callOptionContract.quantity).multipliedBy(new BN(callOptionContract.strikePrice))).toNumber().toPrecision(2)
+            // console.log("quantValidation",sentQuantity,reqUsdcQuuantity)
+            if(reqUsdcQuuantity !== sentQuantity){
+                throw new Error(`Inavlid transaction amount.`)
+            }
+
+            //add USDC transaction to transaction table
+            await models.Transaction.create({
+                userId: user.userId,
+                contractId: callOptionContract.id,
+                txType:'processedWithAboveStrikePriceTxUSDC',
+                txAmount:sentQuantity,
+                txHash:req.body.txHash,
+                fees:0,
+                status: "Success"
+            },{transaction})
+             
+            let amountinBTC
+            let statusObj ={}
+            if(callOptionContract.deployment === "ICP"){
+                //getting contract details from icp
+                let contractDetails = await icpMethods.getOptionContract(callOptionContract.contractAddress)
+                //validating if userAddress is buyer 
+                if(contractDetails.holder !== req.body.userAddress){
+                    throw new Error("Given user address is not the owner of the contract.")
+                }
+                let poolAddress =await icpMethods.getCanisterPoolAddress()
+                let poolBalance = await icpMethods.getPoolBalance(poolAddress)
+                let reqPoolBalance=new BN(poolBalance).dividedBy(dotenv.TBTC_Decimal).toString()
+                let reqAmount = new BN(contractDetails.btc_quantity).dividedBy(dotenv.TBTC_Decimal).toString()
+                console.log("balanceLog",reqPoolBalance,reqAmount)
+                if(reqPoolBalance < reqAmount){
+                    throw new Error("Internal Error")
+                }
+                let txHash =  await icpMethods.expireIcpContractForOwner(callOptionContract.contractAddress,callOptionContract.icpAuthSignature,callOptionContract.icpAuthString)
+                statusObj.status = "Success"
+                statusObj.quantity = callOptionContract.quantity
+                statusObj.TransactionHash = txHash
+            }
+            else{
+                //transfer the BTC amount
+                amountinBTC = callOptionContract.quantity
+                statusObj =  await sendTransaction(dotenv.TBTC_UserPoolAddress, amountinBTC, dotenv.TBTC_HotWalletId, dotenv.TBTC_encryptedString, dotenv.TBTC_walletPassphrase)
+            }
+       
+            
+
+            console.log("statusObj",statusObj)
+            if(statusObj.status === "Success"){
+                let newBalance = (new BN(user.balance)).plus(new BN(statusObj.quantity)).toPrecision(8)
+                await models.User.update({balance : newBalance},{
+                    where:{
+                        walletAddress: req.body.userAddress
+                    }
+                },{transaction})
+                console.log("balanceUpdate",user.balance,newBalance)
+                //add btc transaction to transaction table
+                await models.Transaction.create({
+                    userId: user.userId,
+                    contractId: callOptionContract.id,
+                    txType:'processedWithAboveStrikePriceTxBTC',
+                    txAmount:statusObj.quantity,
+                    txHash:statusObj.TransactionHash,
+                    fees:0,
+                    status: statusObj.status
+                },{transaction})
+
+                //update status of the contract
+                await models.MoneyMakerContract.update({
+                    status:"processedWithBelowStrikePrice"
+                },{where:
+                    {id: callOptionContract.id}
+                },{transaction})
+            res.status(200).send({status:"Success",txHash:statusObj.TransactionHash})
+            }
+            else{
+                throw new Error(`BTC transfer transaction is ${txStatus}.`)
+            }
+
+        })
+    }
+    catch(error){
+        console.log("error",error)
+        res.status(500).send(error.message)
+    }
+}
+
 module.exports ={
     getContractList,
     buyContract,
     getBuyerContracts,
     checkUserRegistration,
-    contractResell
+    contractResell,
+    buyLockedBTC
 }
