@@ -12,7 +12,7 @@ const cron = require("node-cron");
 app.use(cors())
 app.use(express.urlencoded({extended:true}))
 app.use(express.json())
-app.use('/api',apiRouter)
+app.use('/app',apiRouter)
 
 // cron.schedule("*/15 * * * * *", moneyMakerController.checkStrikePrice)
 
