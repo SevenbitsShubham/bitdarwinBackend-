@@ -76,7 +76,7 @@ module.exports = (sequelize,DataTypes) =>{
         status:{
             type: DataTypes.STRING,
             validate:{
-                isIn:[['pending','inprocess','inprocess-resell','processedWithAboveStrikePrice','processedWithBelowStrikePrice']]
+                isIn:[['pending','inprocess','inprocess-resell','inExpirationProcess','processedWithAboveStrikePrice','processingWithAboveStrikePrice','processedWithBelowStrikePrice']]
             }
         },
         contractAddress:{

@@ -25,6 +25,7 @@ router.post('/buyer/contract/list',buyerController.getContractList)
 router.post('/buyer/buy',buyerController.buyContract)
 router.post('/buyer/ownerContractList',buyerController.getBuyerContracts)
 router.post('/buyer/resellContract',buyerController.contractResell)
+router.post('/buyer/buyLockedBTC',buyerController.buyLockedBTC)
 
 
 module.exports = router

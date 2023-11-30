@@ -7,14 +7,14 @@ const dotenv = require("dotenv").config().parsed;
 const bitgo = new BitGo.BitGo({accessToken:dotenv.BITGO_AccessToken}); // defaults to testnet. add env: 'prod' if you want to go against mainnet
 const Web3 = require('web3')
 const icpMethods = require('../helper/icpMethods.js')
+const {validateDepositTx,sendTransaction,validateTx} = require('../helper/txValidationHelper.js')
 
 const CoinMarketCap = require('coinmarketcap-api')
 const client = new CoinMarketCap(dotenv.COINMARKETCAP_ApiKey);
 
 const cloudinary = require('cloudinary').v2
 const fs = require("fs")
-// const Chroma = require('langchain/vectorstores/chroma')
-// const OpenAIEmbeddings = require('langchain/embeddings/openai')
+
 cloudinary.config({
     cloud_name: process.env.CLOUD_NAME,
     api_key: process.env.API_KEY,
@@ -25,6 +25,9 @@ let web3 = new Web3(`https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`)
 
 const createContract = async(req,res) =>{
         try{
+
+            // await models.sequelize.transaction(async(transaction)=>{ 
+
             //initial parameter validation
             if(!req.body.walletAddress || !req.body.expirationDate || !req.body.query || !req.body.hex || !req.body.signature || !req.body.contractType  ){
                  throw new Error("Valid parameters are required.")   
@@ -74,6 +77,10 @@ const createContract = async(req,res) =>{
                 }
                })
 
+               if(!reqTx){
+                throw new Error("Transaction hash is not valid.") 
+               }
+            
                if(reqTx.contractId){
                    throw new Error("Deposit transaction for the contract is already used, invalid deposit transaction.") 
                }
@@ -89,8 +96,7 @@ const createContract = async(req,res) =>{
                     quantity:req.body.quantity,
                     currency:req.body.currency,
                     deployment:req.body.deployment,
-                    status: 'inprocess',   //
-                    contractAddress:null,
+                    status: 'inprocess',   
                     buyAvailable:true,
                     contractType:req.body.contractType,
                     contractAddress:newContractAddress,
@@ -114,7 +120,6 @@ const createContract = async(req,res) =>{
                     deployment:req.body.deployment,
                     status: 'inprocess',
                     premium:10,
-                    contractAddress:null,
                     buyAvailable:true,
                     contractType:req.body.contractType,
                     contractAddress:newContractAddress,
@@ -155,7 +160,8 @@ const createContract = async(req,res) =>{
                 }
             await models.Transaction.create(transactionData)
 
-            res.status(200).send('Success')        
+            res.status(200).send({status:'Success',contractAddress:newContract.contractAddress})   
+        // })     
 
         }
         catch(error){
@@ -167,6 +173,9 @@ const createContract = async(req,res) =>{
 
 const getWalletBalance = async(req,res) =>{
     try{
+        let wallet = await bitgo.coin(dotenv.TBTC_Coin).wallets().get({ id: dotenv.TBTC_UserWalletId });
+        let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.TBTC_Decimal).toString()
+        console.log("balancelog",walletBalance)
         if(!req.body.walletAddress){
             throw new Error("WalletAddress is required.")
         }
@@ -200,7 +209,7 @@ const pricePredictor = async(req,res) =>{
         }
         
         // const predictionScript = spawn('python',["../utils/prediction.py"])
-        const predictionScript = spawnSync('python3',["../bitdarwinBackend-/utils/prediction.py","prediction",'../bitdarwinBackend-/utils/BTC-USD-current-price.csv',req.body.months])
+        const predictionScript = spawnSync('python3',["../backend/utils/prediction.py","prediction",'../backend/utils/BTC-USD-current-price.csv',req.body.months])
         let result= predictionScript.stdout?.toString()?.trim();
         const error = predictionScript.stderr?.toString()?.trim();
 
@@ -209,17 +218,16 @@ const pricePredictor = async(req,res) =>{
             throw new Error(error)
         }
 
-        let filepath = '../bitdarwinBackend-/plot.png'
+        let filepath = '../backend/plot.png'
         cloudinary.uploader.upload(filepath,(error,result)=>{
             if(error){
                 throw new Error(error)
             }
             if(result){
-                console.log("log1",result)
                 if(fs.existsSync(filepath)){
                     fs.unlinkSync(filepath)
                 }
-                res.status(200).json({url:result.secure_url})
+                res.status(200).json({url:result.secure_url} )
             }
         })
         
@@ -232,42 +240,95 @@ const pricePredictor = async(req,res) =>{
 
 const getPoolAddress = async(req,res) =>{
     try {
-        res.status(200).json({poolAddress:process.env.WBTC_UserPoolAddress})
+        res.status(200).json({poolAddress:process.env.TBTC_UserPoolAddress})
     } catch (error) {
         
     }
 }
 
 async function checkStrikePrice()  {
-    let contracts =  await models.MoneyMakerContract.findAll({status:"inProcess"})
+    let contracts =  await models.MoneyMakerContract.findAll({
+        where:{
+            status:"inprocess"
+        }
+        })
     let currentBTCPrice = await USDConverter('BTC')
-    console.log(currentBTCPrice)
-    for(let i=0;i<contracts.length;i++){
+    console.log("checkPriceLog",contracts.length)
+    // contracts = [contracts[0]]
+    for(let contract of contracts){
         
-        let expirationDate = new Date(contracts[i].dataValues.expirationDate);
+        let expirationDate = new Date(contract.dataValues.expirationDate);
         let currentTime = new Date();
         console.log(currentTime,"current time")
         console.log(expirationDate,"expiration date time")
         
         if(currentTime > expirationDate){
-            console.log(contracts[i].dataValues.strikePrice,".........................................price",currentBTCPrice)
-            if(contracts[i].dataValues.strikePrice <= currentBTCPrice){
-                //success
+            console.log("currentContract",contract.id,contract.strikePrice,".........................................price",currentBTCPrice)
+            if(contract.dataValues.strikePrice < currentBTCPrice){
+                //failed
                 await models.MoneyMakerContract.update({
-                    status:"processedWithBelowStrikePrice"
+                    status:"inExpirationProcess"
                 },{where:
-                    {id: contracts[i].id}
+                    {id: contract.id}
                 })
+                let creatorUserAddress = await models.User.findOne({userId: contract.createrId})
+                console.log(creatorUserAddress.walletAddress)
+                let amountinBTC = contract.quantity
+
+                let statusObj={}
+                console.log("cron50")
+                if(contract.deployment === "ICP"){
+                    let txHash =  await icpMethods.expireIcpContractForCreator(contract.contractAddress,contract.icpAuthSignature,contract.icpAuthString)
+                    console.log("cron50.5")
+                    statusObj.status = "Success"
+                    statusObj.quantity = contract.quantity
+                    statusObj.TransactionHash = txHash
+                    console.log("cron51")
+                }
+                else{
+                    statusObj =  await sendTransaction(dotenv.TBTC_UserPoolAddress, amountinBTC, dotenv.TBTC_HotWalletId, dotenv.TBTC_encryptedString, dotenv.TBTC_walletPassphrase)
+                }
+
+                console.log("cron52")
+                console.log("statusObj",statusObj)
+                if(statusObj.status === "Success"){
+                    let newBalance = (new BN(creatorUserAddress.balance)).plus(new BN(statusObj.quantity)).toPrecision(8)
+                    await models.User.update({balance : newBalance},{
+                        where:{
+                            userId: contract.createrId
+                        }
+                    })
+                    console.log("balanceUpdate",creatorUserAddress.balance,newBalance)
+
+                    console.log("contractStatusUpdate","processedWithBelowStrikePrice")
+                    await models.MoneyMakerContract.update({
+                        status:"processedWithBelowStrikePrice"
+                    },{where:
+                        {id: contract.id}
+                    })
+
+                    await models.Transaction.create({
+                        userId: contract.createrId,
+                        contractId: contract.id,
+                        txType:'processedWithBelowStrikePriceTx',
+                        txAmount:statusObj.quantity,
+                        txHash:statusObj.TransactionHash,
+                        fees:0,
+                        status: statusObj.status
+                    })
+                }
+                console.log("cron59")
             }
             else{
-                let marketMakerUserAddress = await models.User.findOne({userId: contracts[i].dataValues.userId})
-                console.log(marketMakerUserAddress.dataValues.walletAddress)
-                let amountinBTC = "0.0003"
-                await sendTransaction(marketMakerUserAddress.dataValues.walletAddress, amountinBTC, dotenv.WBTC_HotWalletId, dotenv.WBTC_encryptedString, dotenv.WBTC_walletPassphrase)
+                //success
+                // let marketMakerUserAddress = await models.User.findOne({userId: contract.dataValues.userId})
+                // console.log(marketMakerUserAddress.dataValues.walletAddress)
+                // let amountinBTC = "0.0003"
+                // await sendTransaction(marketMakerUserAddress.dataValues.walletAddress, amountinBTC, dotenv.TBTC_HotWalletId, dotenv.TBTC_encryptedString, dotenv.TBTC_walletPassphrase)
                 await models.MoneyMakerContract.update({
-                    status:"processedWithAboveStrikePrice"
+                    status:"processingWithAboveStrikePrice"
                 },{where:
-                    {id: contracts[i].id}
+                    {id: contract.id}
                 })
 
             }
@@ -294,55 +355,58 @@ async function USDConverter(token) {
 }
 
 
-async function sendTransaction(address, amount, walletId, encryptedString, walletPassphrase) {
-    try {   
-        console.log("====================================================== SENDING WBTC TO MARKETMAKERS =================================================")
-            let amountinDecimal = new BN(amount).times(dotenv.WBTC_Decimal).toString()
-            console.log(amountinDecimal)
-            let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: walletId });
-            try {
+// async function sendTransaction(address, amount, walletId, encryptedString, walletPassphrase) {
+//         console.log("====================================================== SENDING TBTC TO MARKETMAKERS =================================================")
+//             let amountinDecimal = new BN(amount).times(dotenv.TBTC_Decimal).toFixed(0).toString()
+//             console.log(amountinDecimal)
+//             let wallet = await bitgo.coin(dotenv.TBTC_Coin).wallets().get({ id: walletId });
+//             let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.TBTC_Decimal).toString()
 
-                let prebuild = await wallet.prebuildTransaction({
-                    recipients: [{address:address,amount:amountinDecimal}]
-                })
+//             console.log("txLog1",walletBalance)
+//             try {
 
-                // bitgo.unlock({ otp: '0000000' }).then(function (unlockResponse) {
-                // });                 
+//                 let prebuild = await wallet.prebuildTransaction({
+//                     recipients: [{address:address,amount:amountinDecimal}]
+//                 })
 
-                let decryptedString = bitgo.decrypt({password: walletPassphrase, input: encryptedString }) 
+//                 // console.log("txLog2",prebuild)
+//                 let decryptedString = bitgo.decrypt({password: walletPassphrase, input: encryptedString }) 
 
-                let signedTX = await wallet.signTransaction({ txPrebuild: prebuild, prv: decryptedString })
+//                 // console.log("txLog3",decryptedString)
+//                 let signedTX = await wallet.signTransaction({ txPrebuild: prebuild, prv: decryptedString })
                 
-                let sendTransaction = await wallet.submitTransaction({
-                    halfSigned: signedTX.halfSigned
-                })
+//                 // console.log("txLog4",signedTX)
+//                 let sendTransaction = await wallet.submitTransaction({
+//                     txHex: signedTX.txHex
+//                 })
 
-                let txStatus= await validateTx(wallet,sendTransaction.txid,amountinDecimal,walletId,process.env.WBTC_PoolAddress)
-                // console.log("debug7",txStatus)
-                
-                if(txStatus.status == "Success"){
-                    txStatus.quantity=new BN(txStatus.quantity).dividedBy(dotenv.WBTC_Decimal).toString()
-                }
-                let payload = {
-                    TransactionHash: sendTransaction.txid,
-                    status: txStatus.status,
-                    quantity:txStatus.quantity
-                }
-                return payload
-            } catch (error) {
-                console.log(error)
-            }
-        }
+//                 // console.log("debug6",signedTX,"wallet",wallet,"sendTx",sendTransaction)
+
+//                 let txStatus= await validateTx(wallet,sendTransaction.txid,amountinDecimal)
+//                 console.log("debug7",txStatus)
+//                 // let txStatus= await validateTx(wallet,sendTransaction.txid,amountinDecimal,walletId,process.env.WBTC_PoolAddress)
+//                 // console.log("debug7",txStatus)
+//                 let reqQuantity
+//                 if(txStatus.status == "Success"){
+//                     reqQuantity=new BN(txStatus.quantity).dividedBy(dotenv.TBTC_Decimal).toString()
+//                 }
+//                 let payload = {
+//                     TransactionHash: sendTransaction.txid,
+//                     status: txStatus.status,
+//                     quantity:reqQuantity
+//                 }
+//                 return payload            
+//         }
     
-    catch (error) {
-        console.log(error)
-    }
-}
+//     catch (error) {
+//         console.log(error)
+//     }
+// }
 
 const poolTransfer = async(req,res) =>{
     try{
         //validateInput 
-        if(!req.body.walletAddress || !req.body.currency || !req.body.quantity){
+        if(!req.body.walletAddress || !req.body.currency || !req.body.quantity || !req.body.deployment){
             throw new Error('Please enter valid inputs.')
         }
 
@@ -359,7 +423,8 @@ const poolTransfer = async(req,res) =>{
         }
 
         //get wallet balance of the user
-        let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
+        let wallet = await bitgo.coin(dotenv.TBTC_Coin).wallets().get({ id: dotenv.TBTC_UserWalletId });
+        let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.TBTC_Decimal)
 
         //check if the lock amount is greater than the balance
         if(req.body.quantity > parseFloat(user.balance)){
@@ -368,10 +433,18 @@ const poolTransfer = async(req,res) =>{
 
         let fees = parseFloat(process.env.FeeAmount)
         //executing and validating the tx
-        poolTxStatus = await sendTransaction(dotenv.WBTC_PoolAddress, (req.body.quantity+fees), dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString, dotenv.WBTC_UserWalletPassphrase)
+        // poolTxStatus = await sendTransaction(dotenv.TBTC_PoolAddress, parseFloat(req.body.quantity)+0.0002, dotenv.TBTC_UserWalletId, dotenv.TBTC_UserEncryptedString, dotenv.TBTC_UserWalletPassphrase)        
+        if(req.body.deployment === "ICP"){
+            let canisterPoolAddress = await icpMethods.getCanisterPoolAddress()
+            poolTxStatus = await sendTransaction(canisterPoolAddress, parseFloat(req.body.quantity)+fees, dotenv.TBTC_UserWalletId, dotenv.TBTC_UserEncryptedString, dotenv.TBTC_UserWalletPassphrase,req.body.deployment)
+        }
+        else{
+            poolTxStatus = await sendTransaction(dotenv.TBTC_PoolAddress, parseFloat(req.body.quantity)+fees, dotenv.TBTC_UserWalletId, dotenv.TBTC_UserEncryptedString, dotenv.TBTC_UserWalletPassphrase,req.body.deployment)
+        }    
+        // poolTxStatus = await sendTransaction(dotenv.WBTC_PoolAddress, (req.body.quantity+fees), dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString, dotenv.WBTC_UserWalletPassphrase)
 
         if(poolTxStatus.status === "Success"){
-            poolTxStatus.quantity=new BN(poolTxStatus.quantity).dividedBy(new BN(dotenv.WBTC_Decimal)).minus(new BN(process.env.FeeAmount)).abs().toString()
+            poolTxStatus.quantity=new BN(poolTxStatus.quantity).dividedBy(new BN(dotenv.TBTC_Decimal)).minus(new BN(process.env.FeeAmount)).abs().toString()
             let newBalance = (new BN(user.balance)).minus(new BN(poolTxStatus.quantity)).toPrecision(8)
             await models.User.update({balance : newBalance},{
                 where:{
@@ -402,83 +475,111 @@ const poolTransfer = async(req,res) =>{
 }
 
 
-const validateTx = async(wallet,txHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.WBTC_UserPoolAddress) =>{
-        return await new Promise((resolve,reject)=>{
-            let count =1
-            let txInterval = setInterval(async()=>{
-                let result= await web3.eth.getTransactionReceipt(txHash)     
-                let res = await wallet.getTransfer({ id: txHash })
-                // console.log("validateLog",res.state)
-                if(res.state === 'confirmed'){
-                    let fromEntry = res.entries.find((entry)=>entry.address === '0x7de01d5f2bef56bdfb9971a270ecd13cac287799')
-                    let toEntry = res.entries.find((entry)=>entry.address === '0x0791f7828a8d0b083bfdb9b03cf3a7f0b9449532')
+// const validateTx = async(walletInstance,transactionHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.TBTC_PoolAddress) =>{
+//         return await new Promise((resolve,reject)=>{
+//             let count =1
+//             let txInterval = setInterval(async()=>{
                 
-                    // console.log('result',res,fromEntry,toEntry,quantity,toEntry.value == quantity)
-                    if(userWalletAddress){
-                        if(fromEntry && toEntry && toEntry.value == quantity){
-                            resolve({status:'Success',quantity:res.value*-1})                           
-                        }else{
-                            resolve({status:'Failed'})                           
-                        }
-                    }
-                    else{
-                        resolve({status:'Success',quantity:res.value*-1})
-                    }
-                    clearInterval(txInterval)
-                }
+//                 let transfer = await walletInstance.getTransfer({id:transactionHash})
+//                 // let result= await web3.eth.getTransactionReceipt(txHash)     
+                
+//                 console.log('result',transfer.state,count)
+//                 if(transfer.state === "confirmed" || transfer.state === "failed" ){
+//                     console.log("debug7",JSON.stringify(transfer))
+//                     if(transfer.state === "confirmed"){
+//                         let findAddressProof 
+//                         console.log("findAddressProof",findAddressProof,quantity,transfer.baseValue)
+//                         if(userWalletAddress ){
+//                             // console.log("debug67",result.from ,userWalletAddress ,result.to ,recieverAddreess)
+//                             // if(result.from === userWalletAddress ){ //&& result.to === recieverAddreess
+//                             //     resolve('Success')
+//                             // }
+//                             // else{
+//                             //     resolve('Failed')
+//                             // }
+//                             // let findAddressProof = transfer.outputs.find(element=>element.address === userWalletAddress)
+//                             // console.log("findAddressProof",findAddressProof,quantity,baseValue)
+//                         findAddressProof = transfer.outputs.find(element=>element.wallet === userWalletAddress)
+//                         }
+//                         else{
+//                             // console.log("log51",Object.keys(transfer),transfer.output,process.env.TBTC_HotWalletId)
+//                         findAddressProof = transfer.outputs.find(element=>{
+//                             console.log("logger",element.wallet === process.env.TBTC_HotWalletId.toString(),element.wallet ,process.env.TBTC_HotWalletId.toString())
+//                             if(element.wallet === process.env.TBTC_HotWalletId.toString()){
+//                                 return element 
+//                             }
+                            
+//                         })
+//                         }
 
-                if(count === 15 ){
-                    resolve('Pending') 
-                    clearInterval(txInterval)
-                }
+//                         console.log("logger2",findAddressProof,parseInt(quantity) === (-1*parseInt(transfer.baseValue)),quantity ,(-1*parseInt(transfer.baseValue)))
+//                         if(parseInt(quantity) === (-1*parseInt(transfer.baseValue)) && findAddressProof){ 
+//                             resolve({status:'Success',quantity})
+//                         }
+//                         else{
+//                             resolve({status:'invalidTx',quantity})
+//                         }
+//                     }
+//                     else if(transfer.state ==="failed"){
+//                         resolve({status:'Rejected',quantity})
+//                     }
+//                     clearInterval(txInterval)
+//                 }
 
-                count++                        
-            },10000)                    
-        })  
+//                 if(count === 120 ){
+//                     resolve({status:'Pending',quantity}) 
+//                     clearInterval(txInterval)
+//                 }
+
+//                 count++                        
+//             },10000)                    
+//         })  
     
-}
+// }
 
-const validateDepositTx = async(txHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.WBTC_UserPoolAddress) =>{
-    return await new Promise((resolve,reject)=>{
-        let count =1
-        let txInterval = setInterval(async()=>{
-            let result= await web3.eth.getTransactionReceipt(txHash)     
+// const validateDepositTx = async(txHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.WBTC_UserPoolAddress) =>{
+//     return await new Promise((resolve,reject)=>{
+//         let count =1
+//         let txInterval = setInterval(async()=>{
+//             let result= await web3.eth.getTransactionReceipt(txHash)     
             
-            if(result?.status){
-            // console.log('result',result,count,result.from.toString(), userWalletAddress.toString(),result.to,recieverAddreess )
-                // if(userWalletAddress){
-                    // console.log("debug67",result.from ,userWalletAddress ,result.to ,recieverAddreess)
-                    //for contract creation from : 0xf58e7f435c2df7d671bc8dd610f36eade19a3c96 to:0x7de01d5f2bef56bdfb9971a270ecd13cac287799
-                    //for balance from: to:0xd4bccebe77b7c1da89818f8889e3ea09046e7e38 
-                    // if(result.to === '0xd4bccebe77b7c1da89818f8889e3ea09046e7e38'){ //&& result.to === recieverAddreess
-                    //     resolve('Success')
-                    // }
-                    // else{
-                    //     resolve('Failed')
-                    // }
-                    resolve('Success')
-                // }
-                // else{
-                //     resolve('Success')
-                // }
-                clearInterval(txInterval)
-            }
+//             if(result?.status){
+//             // console.log('result',result,count,result.from.toString(), userWalletAddress.toString(),result.to,recieverAddreess )
+//                 // if(userWalletAddress){
+//                     // console.log("debug67",result.from ,userWalletAddress ,result.to ,recieverAddreess)
+//                     //for contract creation from : 0xf58e7f435c2df7d671bc8dd610f36eade19a3c96 to:0x7de01d5f2bef56bdfb9971a270ecd13cac287799
+//                     //for balance from: to:0xd4bccebe77b7c1da89818f8889e3ea09046e7e38 
+//                     // if(result.to === '0xd4bccebe77b7c1da89818f8889e3ea09046e7e38'){ //&& result.to === recieverAddreess
+//                     //     resolve('Success')
+//                     // }
+//                     // else{
+//                     //     resolve('Failed')
+//                     // }
+//                     resolve('Success')
+//                 // }
+//                 // else{
+//                 //     resolve('Success')
+//                 // }
+//                 clearInterval(txInterval)
+//             }
 
-            if(count === 10 ){
-                resolve('Pending') 
-                clearInterval(txInterval)
-            }
+//             if(count === 10 ){
+//                 resolve('Pending') 
+//                 clearInterval(txInterval)
+//             }
 
-            count++                        
-        },10000)                    
-    })  
+//             count++                        
+//         },10000)                    
+//     })  
 
-}
+// }
 
 const validateOffPortalTx = async(req,res) =>{
     try{
+        await models.sequelize.transaction(async(transaction)=>{
+
         //validateInput 
-       if(!req.body.walletAddress || !req.body.userWalletAddress || !req.body.txHash || !req.body.quantity){
+       if(!req.body.walletAddress || !req.body.txHash ){
             throw new Error("Please provide valid inputs.")
        } 
 
@@ -487,7 +588,7 @@ const validateOffPortalTx = async(req,res) =>{
             where:{
                 walletAddress: req.body.walletAddress    
             }
-       })
+       },{transaction})
 
        //if not registered throw error
        if(!user){
@@ -499,19 +600,25 @@ const validateOffPortalTx = async(req,res) =>{
         where:{
             txHash: req.body.txHash
         }
-       })
+       },{transaction})
 
        //if tx is present throw error
        if(tx){
            throw new Error("Transaction is already present in the system.") 
        }
 
-        //check the status of the tx       
-       let txStatus = await validateDepositTx(req.body.txHash,req.body.quantity,req.body.userWalletAddress)
+       let wallet = await bitgo.coin(dotenv.TBTC_Coin).wallets().get({ id: dotenv.TBTC_UserWalletId });
+       let amountinDecimal = new BN(req.body.quantity).times(dotenv.TBTC_Decimal).toString()
 
-       if(txStatus === "Success"){
-        let newBalance = (new BN(user.balance)).plus(new BN(req.body.quantity)).toPrecision(8)
-        console.log("log62",newBalance,user.balance,req.body.quantity)
+       //check the status of the tx       
+       let txStatus = await validateTx(wallet,req.body.txHash,null,process.env.TBTC_UserPoolAddress)
+        //check the status of the tx       
+    //    let txStatus = await validateDepositTx(req.body.txHash,req.body.quantity,req.body.userWalletAddress)
+
+       if(txStatus.status === "Success"){
+        let reqQuantity = new BN(txStatus.quantity).dividedBy(dotenv.TBTC_Decimal).toString()
+        let newBalance = (new BN(user.balance)).plus(new BN(reqQuantity)).toPrecision(8)
+        console.log("updateBalance",user.balance,newBalance)
         await models.User.update({balance : newBalance},{
             where:{
                 walletAddress: req.body.walletAddress
@@ -525,18 +632,18 @@ const validateOffPortalTx = async(req,res) =>{
         txType:'poolTransfer',
         txAmount:req.body.quantity,
         txHash:req.body.txHash,
-        status: txStatus
-       })
+        status: txStatus.status
+       },{transaction})
 
        console.log("debug10",txStatus)
 
-       if(txStatus === 'Success' || txStatus === 'Pending'){
-            res.status(200).json({txStatus,txHash: newTx.txHash})
+       if(txStatus.status === 'Success'){
+            res.status(200).json({...txStatus,txHash: newTx.txHash})
        }
        else{
         res.status(400).json({txStatus})
        }
-
+     })
     }
     catch (error) {
         console.log(error)
@@ -619,7 +726,8 @@ const depositFees = async(req,res) =>{
         }        
 
         //get balance of the user
-        let wallet = await bitgo.coin(dotenv.WBTC_Coin).wallets().get({ id: dotenv.WBTC_UserWalletId });
+        let wallet = await bitgo.coin(dotenv.TBTC_Coin).wallets().get({ id: dotenv.TBTC_UserWalletId });
+        // let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.TBTC_Decimal)
 
         //check if balance of the user is less that 0.0002BTC fees
         if(fees > parseFloat(user.balance)){
@@ -627,7 +735,7 @@ const depositFees = async(req,res) =>{
         }
 
         //transfer amount and validate the transaction
-        poolTxStatus = await sendTransaction(dotenv.WBTC_PoolAddress, fees, dotenv.WBTC_UserWalletId, dotenv.WBTC_UserEncryptedString, dotenv.WBTC_UserWalletPassphrase)
+        poolTxStatus = await sendTransaction(dotenv.TBTC_PoolAddress, fees, dotenv.TBTC_UserWalletId, dotenv.TBTC_UserEncryptedString, dotenv.TBTC_UserWalletPassphrase)
 
         console.log("feeApi1",poolTxStatus)
         if(poolTxStatus.status === "Success"){
