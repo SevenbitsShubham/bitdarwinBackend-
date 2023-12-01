@@ -71,16 +71,17 @@ const createContract = async(req,res) =>{
                if(!req.body.txHash){
                     throw new Error("TxHash is required.")
                }
+            
+               
+            //    let reqTx = await models.Transaction.findOne({
+            //     where:{
+            //         txHash: req.body.txHash
+            //     }
+            //    })
 
-               let reqTx = await models.Transaction.findOne({
-                where:{
-                    txHash: req.body.txHash
-                }
-               })
-
-               if(!reqTx){
-                throw new Error("Transaction hash is not valid.") 
-               }
+            //    if(!reqTx){
+            //     throw new Error("Transaction hash is not valid.") 
+            //    }
             
             //    if(reqTx.contractId){
             //        throw new Error("Deposit transaction for the contract is already used, invalid deposit transaction.") 
