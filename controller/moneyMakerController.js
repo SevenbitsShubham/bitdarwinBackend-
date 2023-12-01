@@ -23,6 +23,7 @@ cloudinary.config({
 
 let web3 = new Web3(`https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`)  
 
+//************************* */
 const createContract = async(req,res) =>{
         try{
 
@@ -81,9 +82,9 @@ const createContract = async(req,res) =>{
                 throw new Error("Transaction hash is not valid.") 
                }
             
-               if(reqTx.contractId){
-                   throw new Error("Deposit transaction for the contract is already used, invalid deposit transaction.") 
-               }
+            //    if(reqTx.contractId){
+            //        throw new Error("Deposit transaction for the contract is already used, invalid deposit transaction.") 
+            //    }
             
             //add contract details
                  contractData = {
@@ -574,6 +575,7 @@ const poolTransfer = async(req,res) =>{
 
 // }
 
+/***************** */
 const validateOffPortalTx = async(req,res) =>{
     try{
         await models.sequelize.transaction(async(transaction)=>{
@@ -603,20 +605,34 @@ const validateOffPortalTx = async(req,res) =>{
        },{transaction})
 
        //if tx is present throw error
-       if(tx){
-           throw new Error("Transaction is already present in the system.") 
-       }
+    //    if(tx){
+    //        throw new Error("Transaction is already present in the system.") 
+    //    }
 
        let wallet = await bitgo.coin(dotenv.TBTC_Coin).wallets().get({ id: dotenv.TBTC_UserWalletId });
        let amountinDecimal = new BN(req.body.quantity).times(dotenv.TBTC_Decimal).toString()
 
        //check the status of the tx       
        let txStatus = await validateTx(wallet,req.body.txHash,null,process.env.TBTC_UserPoolAddress)
-        //check the status of the tx       
-    //    let txStatus = await validateDepositTx(req.body.txHash,req.body.quantity,req.body.userWalletAddress)
+
+       if(txStatus.status === 'error'){
+        // console.log("log",txStatus.error)
+        // if(txStatus.error.result.name === 'Invalid'){
+            throw new Error("Please try after some time, transaction is still confirming.")
+        // }
+       }
+
+       if(txStatus.status === 'failed'){
+        throw new Error("Invalid transaction.")
+       }
+
+       if(txStatus.status === 'Pending'){
+        throw new Error("Transaction taking too much time for validation, please try after some time.")
+       }
 
        if(txStatus.status === "Success"){
-        let reqQuantity = new BN(txStatus.quantity).dividedBy(dotenv.TBTC_Decimal).toString()
+        let reqQuantity = Math.abs(new BN(txStatus.quantity).dividedBy(dotenv.TBTC_Decimal).toString())
+        console.log("reqQuantity",reqQuantity)
         let newBalance = (new BN(user.balance)).plus(new BN(reqQuantity)).toPrecision(8)
         console.log("updateBalance",user.balance,newBalance)
         await models.User.update({balance : newBalance},{

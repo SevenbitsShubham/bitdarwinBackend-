@@ -48,14 +48,14 @@ const getContractList = async(req,res) =>{
 //validate transaction given by user
 const buyContract  = async(req,res) =>{
     try{
-        await models.sequelize.transaction(async (transaction) =>{
+        // await models.sequelize.transaction(async (transaction) =>{
         if(!req.body.contractAddress || !req.body.txHash || !req.body.userWalletAddress){
              throw new Error("Provide valid inputs.")   
         }
 
         //check if user is prtesent
         let user =await models.User.findOne({
-            where:{walletAddress:req.body.userWalletAddress}},{transaction})
+            where:{walletAddress:req.body.userWalletAddress}} )
 
         //if not create new user entry
         if(!user){
@@ -70,7 +70,7 @@ const buyContract  = async(req,res) =>{
                 as: 'OwnerId',
                 attributes:['walletAddress']
             }]
-        },{transaction})
+        })
 
         //validate input parameters for icp 
         if(contract.deployment === 'ICP'){
@@ -141,10 +141,10 @@ const buyContract  = async(req,res) =>{
             where:{
                 contractAddress:req.body.contractAddress
             }
-        },{transaction})
+        })
 
         res.status(200).send("success")
-      })
+    //   })
     }
     catch(error){
         console.log("error",error)
@@ -304,7 +304,7 @@ const contractResell = async(req,res) =>{
 
 const buyLockedBTC = async(req,res) =>{
     try{
-        await models.sequelize.transaction(async (transaction) =>{
+        // await models.sequelize.transaction(async (transaction) =>{
         
             //input validation
             if(!req.body.contractAddress || !req.body.txHash || !req.body.userAddress){
@@ -315,7 +315,7 @@ const buyLockedBTC = async(req,res) =>{
                 where:{
                     txHash: req.body.txHash
                 }
-            },{transaction})
+            })
 
             if(tx){
                 throw new Error("Transaction is already present in the system.")
@@ -331,7 +331,7 @@ const buyLockedBTC = async(req,res) =>{
                     as: 'OwnerId',
                     attributes:['walletAddress','balance']
                 }]
-            },{transaction})
+            })
 
             if(!callOptionContract){
                 throw new Error("Contract doesn't exist.")
@@ -353,7 +353,7 @@ const buyLockedBTC = async(req,res) =>{
                 where:{
                     walletAddress: req.body.userAddress
                 }
-            },{transaction})
+            })
 
             //check if user ownership exists 
             if(callOptionContract.OwnerId.walletAddress !== req.body.userAddress){
@@ -384,7 +384,7 @@ const buyLockedBTC = async(req,res) =>{
                 txHash:req.body.txHash,
                 fees:0,
                 status: "Success"
-            },{transaction})
+            })
              
             let amountinBTC
             let statusObj ={}
@@ -423,7 +423,7 @@ const buyLockedBTC = async(req,res) =>{
                     where:{
                         walletAddress: req.body.userAddress
                     }
-                },{transaction})
+                })
                 console.log("balanceUpdate",user.balance,newBalance)
                 //add btc transaction to transaction table
                 await models.Transaction.create({
@@ -434,21 +434,21 @@ const buyLockedBTC = async(req,res) =>{
                     txHash:statusObj.TransactionHash,
                     fees:0,
                     status: statusObj.status
-                },{transaction})
+                })
 
                 //update status of the contract
                 await models.MoneyMakerContract.update({
                     status:"processedWithBelowStrikePrice"
                 },{where:
                     {id: callOptionContract.id}
-                },{transaction})
+                })
             res.status(200).send({status:"Success",txHash:statusObj.TransactionHash})
             }
             else{
                 throw new Error(`BTC transfer transaction is ${txStatus}.`)
             }
 
-        })
+        // })
     }
     catch(error){
         console.log("error",error)
