@@ -124,12 +124,26 @@ catch (error) {
 }
 
 const validateTx = async(walletInstance,transactionHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.TBTC_PoolAddress) =>{
+    try{
     return await new Promise((resolve,reject)=>{
         let count =1
         let txInterval = setInterval(async()=>{
-            let transfer = await walletInstance.getTransfer({id:transactionHash})
-            // let result= await web3.eth.getTransactionReceipt(txHash)     
-            console.log('result',transfer.state,count)
+            console.log("v1")
+            let transfer
+            try{
+                transfer = await walletInstance.getTransfer({id:transactionHash})
+            }
+            catch(error){
+                // console.log("error",error)
+                clearInterval(txInterval)
+                return reject({status:'error',error} )
+            }
+            
+            // let result= await web3.eth.getTransactionReceipt(txHash)   
+            if(transfer){
+                console.log('result',transfer.state,count)
+             
+           
             if(transfer.state === "confirmed" || transfer.state === "failed" ){
                 console.log("debug7",JSON.stringify(transfer))
                 if(transfer.state === "confirmed"){
@@ -178,10 +192,15 @@ const validateTx = async(walletInstance,transactionHash,quantity=null,userWallet
                 resolve({status:'Pending',quantity}) 
                 clearInterval(txInterval)
             }
-
+        }
             count++                        
         },10000)                    
     })  
+}
+catch(error){
+    console.log("verror",error)
+    return {status:'error',error}
+}
 
 }
 
