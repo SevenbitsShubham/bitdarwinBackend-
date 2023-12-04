@@ -24,6 +24,7 @@ cloudinary.config({
 let web3 = new Web3(`https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`)  
 
 //************************* */
+//function is used to create and deploy a contract
 const createContract = async(req,res) =>{
         try{
 
@@ -172,7 +173,7 @@ const createContract = async(req,res) =>{
         }
 }
 
-
+//function is used to return the user balance 
 const getWalletBalance = async(req,res) =>{
     try{
         let wallet = await bitgo.coin(dotenv.TBTC_Coin).wallets().get({ id: dotenv.TBTC_UserWalletId });
@@ -200,6 +201,7 @@ const getWalletBalance = async(req,res) =>{
     }
 }
 
+//function is used to create the plot using ARIMA model and upload the plot image on a cloud and returns the url of the plot
 const pricePredictor = async(req,res) =>{
     try{
         if(!req.body.months){
@@ -240,6 +242,7 @@ const pricePredictor = async(req,res) =>{
     }
 }
 
+//function is used to return user pool wallet address
 const getPoolAddress = async(req,res) =>{
     try {
         res.status(200).json({poolAddress:process.env.TBTC_UserPoolAddress})
@@ -248,6 +251,8 @@ const getPoolAddress = async(req,res) =>{
     }
 }
 
+//cron job handler function which basically checks if call option contract is expired or not and if expired it cheks and update the status of the contract based on the strike price in the contract and the current price
+//for passed call option contract contract it changes the status of the contract to 'processingWithAboveStrikePrice' and for failed call option contract it changes the ststus of the contract to 'processedWithBelowStrikePrice' and send the locked assets to the owner of the contract
 async function checkStrikePrice()  {
     let contracts =  await models.MoneyMakerContract.findAll({
         where:{
@@ -338,6 +343,7 @@ async function checkStrikePrice()  {
     }
 }
 
+//function provides price of the BTC
 async function USDConverter(token) {
     try {
         let data, USD_price;
@@ -356,55 +362,7 @@ async function USDConverter(token) {
     }
 }
 
-
-// async function sendTransaction(address, amount, walletId, encryptedString, walletPassphrase) {
-//         console.log("====================================================== SENDING TBTC TO MARKETMAKERS =================================================")
-//             let amountinDecimal = new BN(amount).times(dotenv.TBTC_Decimal).toFixed(0).toString()
-//             console.log(amountinDecimal)
-//             let wallet = await bitgo.coin(dotenv.TBTC_Coin).wallets().get({ id: walletId });
-//             let walletBalance = new BN(wallet._wallet.balanceString).dividedBy(dotenv.TBTC_Decimal).toString()
-
-//             console.log("txLog1",walletBalance)
-//             try {
-
-//                 let prebuild = await wallet.prebuildTransaction({
-//                     recipients: [{address:address,amount:amountinDecimal}]
-//                 })
-
-//                 // console.log("txLog2",prebuild)
-//                 let decryptedString = bitgo.decrypt({password: walletPassphrase, input: encryptedString }) 
-
-//                 // console.log("txLog3",decryptedString)
-//                 let signedTX = await wallet.signTransaction({ txPrebuild: prebuild, prv: decryptedString })
-                
-//                 // console.log("txLog4",signedTX)
-//                 let sendTransaction = await wallet.submitTransaction({
-//                     txHex: signedTX.txHex
-//                 })
-
-//                 // console.log("debug6",signedTX,"wallet",wallet,"sendTx",sendTransaction)
-
-//                 let txStatus= await validateTx(wallet,sendTransaction.txid,amountinDecimal)
-//                 console.log("debug7",txStatus)
-//                 // let txStatus= await validateTx(wallet,sendTransaction.txid,amountinDecimal,walletId,process.env.WBTC_PoolAddress)
-//                 // console.log("debug7",txStatus)
-//                 let reqQuantity
-//                 if(txStatus.status == "Success"){
-//                     reqQuantity=new BN(txStatus.quantity).dividedBy(dotenv.TBTC_Decimal).toString()
-//                 }
-//                 let payload = {
-//                     TransactionHash: sendTransaction.txid,
-//                     status: txStatus.status,
-//                     quantity:reqQuantity
-//                 }
-//                 return payload            
-//         }
-    
-//     catch (error) {
-//         console.log(error)
-//     }
-// }
-
+//function facilitates TBTC transfer from user wallet to system wallet or canister wallet based on deployment of the call option contract
 const poolTransfer = async(req,res) =>{
     try{
         //validateInput 
@@ -476,107 +434,8 @@ const poolTransfer = async(req,res) =>{
     }
 }
 
-
-// const validateTx = async(walletInstance,transactionHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.TBTC_PoolAddress) =>{
-//         return await new Promise((resolve,reject)=>{
-//             let count =1
-//             let txInterval = setInterval(async()=>{
-                
-//                 let transfer = await walletInstance.getTransfer({id:transactionHash})
-//                 // let result= await web3.eth.getTransactionReceipt(txHash)     
-                
-//                 console.log('result',transfer.state,count)
-//                 if(transfer.state === "confirmed" || transfer.state === "failed" ){
-//                     console.log("debug7",JSON.stringify(transfer))
-//                     if(transfer.state === "confirmed"){
-//                         let findAddressProof 
-//                         console.log("findAddressProof",findAddressProof,quantity,transfer.baseValue)
-//                         if(userWalletAddress ){
-//                             // console.log("debug67",result.from ,userWalletAddress ,result.to ,recieverAddreess)
-//                             // if(result.from === userWalletAddress ){ //&& result.to === recieverAddreess
-//                             //     resolve('Success')
-//                             // }
-//                             // else{
-//                             //     resolve('Failed')
-//                             // }
-//                             // let findAddressProof = transfer.outputs.find(element=>element.address === userWalletAddress)
-//                             // console.log("findAddressProof",findAddressProof,quantity,baseValue)
-//                         findAddressProof = transfer.outputs.find(element=>element.wallet === userWalletAddress)
-//                         }
-//                         else{
-//                             // console.log("log51",Object.keys(transfer),transfer.output,process.env.TBTC_HotWalletId)
-//                         findAddressProof = transfer.outputs.find(element=>{
-//                             console.log("logger",element.wallet === process.env.TBTC_HotWalletId.toString(),element.wallet ,process.env.TBTC_HotWalletId.toString())
-//                             if(element.wallet === process.env.TBTC_HotWalletId.toString()){
-//                                 return element 
-//                             }
-                            
-//                         })
-//                         }
-
-//                         console.log("logger2",findAddressProof,parseInt(quantity) === (-1*parseInt(transfer.baseValue)),quantity ,(-1*parseInt(transfer.baseValue)))
-//                         if(parseInt(quantity) === (-1*parseInt(transfer.baseValue)) && findAddressProof){ 
-//                             resolve({status:'Success',quantity})
-//                         }
-//                         else{
-//                             resolve({status:'invalidTx',quantity})
-//                         }
-//                     }
-//                     else if(transfer.state ==="failed"){
-//                         resolve({status:'Rejected',quantity})
-//                     }
-//                     clearInterval(txInterval)
-//                 }
-
-//                 if(count === 120 ){
-//                     resolve({status:'Pending',quantity}) 
-//                     clearInterval(txInterval)
-//                 }
-
-//                 count++                        
-//             },10000)                    
-//         })  
-    
-// }
-
-// const validateDepositTx = async(txHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.WBTC_UserPoolAddress) =>{
-//     return await new Promise((resolve,reject)=>{
-//         let count =1
-//         let txInterval = setInterval(async()=>{
-//             let result= await web3.eth.getTransactionReceipt(txHash)     
-            
-//             if(result?.status){
-//             // console.log('result',result,count,result.from.toString(), userWalletAddress.toString(),result.to,recieverAddreess )
-//                 // if(userWalletAddress){
-//                     // console.log("debug67",result.from ,userWalletAddress ,result.to ,recieverAddreess)
-//                     //for contract creation from : 0xf58e7f435c2df7d671bc8dd610f36eade19a3c96 to:0x7de01d5f2bef56bdfb9971a270ecd13cac287799
-//                     //for balance from: to:0xd4bccebe77b7c1da89818f8889e3ea09046e7e38 
-//                     // if(result.to === '0xd4bccebe77b7c1da89818f8889e3ea09046e7e38'){ //&& result.to === recieverAddreess
-//                     //     resolve('Success')
-//                     // }
-//                     // else{
-//                     //     resolve('Failed')
-//                     // }
-//                     resolve('Success')
-//                 // }
-//                 // else{
-//                 //     resolve('Success')
-//                 // }
-//                 clearInterval(txInterval)
-//             }
-
-//             if(count === 10 ){
-//                 resolve('Pending') 
-//                 clearInterval(txInterval)
-//             }
-
-//             count++                        
-//         },10000)                    
-//     })  
-
-// }
-
 /***************** */
+//function is used to validate the transaction to user pool wallet to top-up the user balance
 const validateOffPortalTx = async(req,res) =>{
     try{
         await models.sequelize.transaction(async(transaction)=>{
@@ -668,57 +527,8 @@ const validateOffPortalTx = async(req,res) =>{
     }
 }
 
-const confirmTx = async(req,res) =>{
-    try{
-        //validate walletAddress and txHash inputs   
-        if(!req.body.userWalletAddress || !req.body.txHash){
-            throw new Error("Valid inputs are required.")
-        }     
 
-        //check if user is present
-        let user = await models.User.findOne({
-            where:{
-                walletAddress: req.body.userWalletAddress
-            }
-        })
-
-        if(!user){
-            throw new Error("Invalid user..")
-        }
-
-        //get tx using txHash also associate user
-        let tx = await models.Transaction.findOne({
-            where:{
-                txHash: req.body.txHash
-            },
-            include:[{model: models.User}]
-        })
-        console.log("debug123",tx)
-
-        //validate tx 
-        if(!tx){
-            throw new Error("Please validate the tx.")
-        }
-
-        //validate user of the tx    
-        if(tx.User.walletAddress !== req.body.userWalletAddress){
-            throw new Error("Transaction doesn't belongs to this user.")
-        }
-
-        //validatetx.txType === 'poolTransfer' or check if contractId is valid 
-        if(tx.txType !== "poolTransfer" || tx.contractId){
-            throw new Error("Transaction is already used for another contract.")
-        }
-
-        res.status(200).send("Success.")
-
-    }
-    catch (error) {
-        console.log(error)
-        res.status(500).send(error.message)
-    }
-}
-
+//function is used to deposit platform fees from user wallet to system wallet
 const depositFees = async(req,res) =>{
     try{
         //check input params (userWalletAddres)
@@ -780,6 +590,5 @@ module.exports = {
     getWalletBalance,
     poolTransfer,
     validateOffPortalTx,
-    confirmTx,
     depositFees
 }

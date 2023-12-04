@@ -6,7 +6,7 @@ const dotenv = require("dotenv").config().parsed;
 const BN = require("bignumber.js")
 const {validateDepositTx,sendTransaction,validateTx} = require('../helper/txValidationHelper.js')
 
-
+//function is used return list contracts available to sell
 const getContractList = async(req,res) =>{
     try{
         if(!req.body.contractType || !req.body.walletAddress){
@@ -46,6 +46,8 @@ const getContractList = async(req,res) =>{
 
 //add transaction to this function 
 //validate transaction given by user
+
+//function is used to buy contract i.e. transfer ownership of the contract
 const buyContract  = async(req,res) =>{
     try{
         // await models.sequelize.transaction(async (transaction) =>{
@@ -152,6 +154,7 @@ const buyContract  = async(req,res) =>{
     }
 }
 
+//function is used to check and resister the connected user at frontend 
 const checkUserRegistration = async(req,res)=>{
    try{
         if(!req.body.walletAddress){
@@ -180,7 +183,7 @@ const checkUserRegistration = async(req,res)=>{
    }  
 }
 
-
+//function is used to return list of contracts which are owned by buyer/user
 const getBuyerContracts = async(req,res) =>{
     try{
         if( !req.body.contractstatus || !req.body.walletAddress){
@@ -240,6 +243,7 @@ const getBuyerContracts = async(req,res) =>{
     }
 }
 
+//function is used to resell the contract in the explorer
 const contractResell = async(req,res) =>{
     try{
         //input validation for contract address
@@ -302,6 +306,7 @@ const contractResell = async(req,res) =>{
     }
 }
 
+//function is used to transfer the locked BTC of the expired contract(passed contract) to the owner of the contract
 const buyLockedBTC = async(req,res) =>{
     try{
         // await models.sequelize.transaction(async (transaction) =>{

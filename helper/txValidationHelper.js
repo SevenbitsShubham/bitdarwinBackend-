@@ -8,6 +8,7 @@ const {usdcAddress,usdcAbi} = require('./usdcContract')
 
 let web3 = new Web3(`https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`)  
 
+//function is used to validate USDC transaction 
 const validateDepositTx = async(txHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.WBTC_UserPoolAddress) =>{
     return await new Promise((resolve,reject)=>{
         let count =1
@@ -38,22 +39,6 @@ const validateDepositTx = async(txHash,quantity=null,userWalletAddress=null,reci
                 else{
                     resolve({status:'Reject',amount:valueObj.value})                    
                 }
-            // console.log('result',result,count,result.from.toString(), userWalletAddress.toString(),result.to,recieverAddreess )
-                // if(userWalletAddress){
-                    // console.log("debug67",result.from ,userWalletAddress ,result.to ,recieverAddreess)
-                    //for contract creation from : 0xf58e7f435c2df7d671bc8dd610f36eade19a3c96 to:0x7de01d5f2bef56bdfb9971a270ecd13cac287799
-                    //for balance from: to:0xd4bccebe77b7c1da89818f8889e3ea09046e7e38 
-                    // if(result.to === '0xd4bccebe77b7c1da89818f8889e3ea09046e7e38'){ //&& result.to === recieverAddreess
-                    //     resolve('Success')
-                    // }
-                    // else{
-                    //     resolve('Failed')
-                    // }
-                    // resolve('Success')
-                // }
-                // else{
-                //     resolve('Success')
-                // }
                 clearInterval(txInterval)
             }
 
@@ -68,7 +53,7 @@ const validateDepositTx = async(txHash,quantity=null,userWalletAddress=null,reci
 
 }
 
-
+//method is used to send TBTC to the required address given in function parameter
 async function sendTransaction(address, amount, walletId, encryptedString, walletPassphrase,deployment) {
     console.log("====================================================== SENDING TBTC TO MARKETMAKERS =================================================")
         let amountinDecimal = new BN(amount).times(dotenv.TBTC_Decimal).toFixed(0).toString()
@@ -123,6 +108,7 @@ catch (error) {
 }
 }
 
+//function to validate TBTC transaction 
 const validateTx = async(walletInstance,transactionHash,quantity=null,userWalletAddress=null,recieverAddreess=process.env.TBTC_PoolAddress) =>{
     try{
     return await new Promise((resolve,reject)=>{
